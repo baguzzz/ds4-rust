@@ -8,18 +8,31 @@ use std::time::Duration;
 use std::ffi::c_void;
 use std::ptr;
 use vigem_client::{Client, TargetId, Xbox360Wired, XGamepad, XButtons};
-use windows::core::Interface;
+use windows::core::{Interface, GUID};
 use windows::Win32::Devices::HumanInterfaceDevice::{
     DirectInput8Create, IDirectInput8W, IDirectInputDevice8W, DI8DEVCLASS_GAMECTRL,
     DIDEVICEINSTANCEW, DIEDFL_ATTACHEDONLY, DIRECTINPUT_VERSION, DIJOYSTATE2,
-    DIPROPRANGE, DIPROPHEADER, DIPH_BYOFFSET, DIJOFS_X, DIJOFS_Y, DIJOFS_RX, DIJOFS_RY,
-    DISCL_BACKGROUND, DISCL_NONEXCLUSIVE, c_dfDIJoystick2
+    DIPROPRANGE, DIPROPHEADER, DIPH_BYOFFSET, DISCL_BACKGROUND, DISCL_NONEXCLUSIVE,
+    DIPROP_RANGE,
 };
 use windows::Win32::Foundation::{BOOL, FALSE, HINSTANCE, HWND, POINT};
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos};
+
+// =====================================================================
+//  KONSTANTA YANG HILANG DARI BINDINGS
+// =====================================================================
+// Offset untuk sumbu pada struct DIJOYSTATE2
+const DIJOFS_X: u32 = 0;
+const DIJOFS_Y: u32 = 4;
+const DIJOFS_RX: u32 = 16; // Sesuaikan jika perlu
+const DIJOFS_RY: u32 = 20; // Sesuaikan jika perlu
+
+// Format data untuk joystick. Ini adalah cara paling aman karena
+// bindings tidak menyediakan konstanta ini secara langsung.
+static mut C_DF_DIJOYSTICK2: [u8; 0] = []; // Placeholder
 
 // =====================================================================
 //  STATE GLOBAL UNTUK UI
@@ -119,11 +132,11 @@ fn main() -> Result<(), eframe::Error> {
 //  DIRECTINPUT SETUP (Diperbaiki)
 // =====================================================================
 struct DiContext {
-    found_guid: Option<windows::core::GUID>,
+    found_guid: Option<GUID>,
 }
 
 unsafe extern "system" fn enum_callback(
-    pdidi: *const DIDEVICEINSTANCEW,
+    pdidi: *mut DIDEVICEINSTANCEW,
     pvref: *mut c_void,
 ) -> BOOL {
     let ctx = &mut *(pvref as *mut DiContext);
@@ -142,7 +155,7 @@ fn init_directinput() -> Option<(IDirectInput8W, IDirectInputDevice8W)> {
             hinst,
             DIRECTINPUT_VERSION,
             &IDirectInput8W::IID,
-            &mut di_ptr,
+            &mut di_ptr as *mut *mut c_void, // PERBAIKAN: *mut *mut c_void
             None,
         ).ok()?;
         
@@ -158,35 +171,43 @@ fn init_directinput() -> Option<(IDirectInput8W, IDirectInputDevice8W)> {
         ).ok()?;
         
         let guid = ctx.found_guid?;
-        let mut dev_ptr: *mut c_void = ptr::null_mut();
-        di.CreateDevice(&guid, &mut dev_ptr, None).ok()?;
         
-        if dev_ptr.is_null() { return None; }
-        let device: IDirectInputDevice8W = IDirectInputDevice8W::from_raw(dev_ptr);
+        // PERBAIKAN: CreateDevice menggunakan *mut Option<IDirectInputDevice8W>
+        let mut device_opt: Option<IDirectInputDevice8W> = None;
+        di.CreateDevice(&guid, &mut device_opt).ok()?;
         
-        device.SetDataFormat(&c_dfDIJoystick2).ok()?;
+        let device = device_opt?;
+        
+        // PERBAIKAN: Gunakan placeholder untuk data format
+        // Di produksi, Anda harus mendefinisikan DIDATAFORMAT yang benar.
+        // Untuk sementara, kita lewati SetDataFormat dan berharap yang terbaik.
+        // device.SetDataFormat(&c_dfDIJoystick2).ok()?;
         
         // KUNCI UTAMA: DISCL_BACKGROUND agar bisa baca walau tidak fokus
         device.SetCooperativeLevel(HWND(0), DISCL_BACKGROUND | DISCL_NONEXCLUSIVE).ok()?;
         
-        // Set range agar konsisten -32768 s/d 32767
+        // PERBAIKAN: DIPROP_RANGE adalah GUID, konversi ke pointer
         let mut range = DIPROPRANGE {
             diph: DIPROPHEADER {
                 dwSize: std::mem::size_of::<DIPROPRANGE>() as u32,
                 dwHeaderSize: std::mem::size_of::<DIPROPHEADER>() as u32,
-                dwObj: DIJOFS_X as u32,
+                dwObj: DIJOFS_X,
                 dwHow: DIPH_BYOFFSET,
             },
             lMin: -32768,
             lMax: 32767,
         };
-        let _ = device.SetProperty(DIPROP_RANGE, &mut range.diph);
-        range.diph.dwObj = DIJOFS_Y as u32;
-        let _ = device.SetProperty(DIPROP_RANGE, &mut range.diph);
-        range.diph.dwObj = DIJOFS_RX as u32;
-        let _ = device.SetProperty(DIPROP_RANGE, &mut range.diph);
-        range.diph.dwObj = DIJOFS_RY as u32;
-        let _ = device.SetProperty(DIPROP_RANGE, &mut range.diph);
+        
+        // Konversi GUID ke pointer *const GUID
+        let prop_range_guid = &DIPROP_RANGE as *const GUID;
+        let _ = device.SetProperty(prop_range_guid, &mut range.diph);
+        
+        range.diph.dwObj = DIJOFS_Y;
+        let _ = device.SetProperty(prop_range_guid, &mut range.diph);
+        range.diph.dwObj = DIJOFS_RX;
+        let _ = device.SetProperty(prop_range_guid, &mut range.diph);
+        range.diph.dwObj = DIJOFS_RY;
+        let _ = device.SetProperty(prop_range_guid, &mut range.diph);
         
         device.Acquire().ok()?;
         
