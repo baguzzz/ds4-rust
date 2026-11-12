@@ -37,9 +37,6 @@ impl Default for DS4App {
 // =====================================================================
 impl eframe::App for DS4App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // TIDAK ADA request_repaint_after DI SINI.
-        // UI akan otomatis tidur (0% CPU) saat tidak ada aktivitas.
-
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("DS4 Unified - Rust Edition");
             ui.separator();
@@ -179,16 +176,14 @@ fn run_local_gopher(is_running: Arc<AtomicBool>, ctx: egui::Context) {
             }
         }
         
-        // Jeda 16ms (60 FPS) untuk membaca input
         thread::sleep(Duration::from_millis(16));
     }
     
-    // Minta UI update saat thread berhenti
     ctx.request_repaint();
 }
 
 // =====================================================================
-//  LOGIKA ANDROID SERVER (TCP & ViGEmBus)
+//  LOGIKA ANDROID SERVER (TCP & ViGEmBus - LOW CPU FIX)
 // =====================================================================
 fn run_android_server(is_running: Arc<AtomicBool>, ctx: egui::Context) {
     unsafe {
@@ -230,71 +225,67 @@ fn run_android_server(is_running: Arc<AtomicBool>, ctx: egui::Context) {
         match listener.accept() {
             Ok((mut stream, _)) => {
                 println!("Android Terhubung!");
+                ctx.request_repaint(); // Update UI saat HP tersambung
                 
                 let _ = stream.set_nodelay(true);
-                let _ = stream.set_read_timeout(Some(Duration::from_millis(50)));
+                // Set nonblocking false agar read_exact bisa menunggu dengan tidur (0% CPU)
+                let _ = stream.set_nonblocking(false); 
                 
                 let mut buf = [0u8; 12];
                 
                 while is_running.load(Ordering::Relaxed) {
-                    match stream.read(&mut buf) {
-                        Ok(0) => {
-                            println!("Android memutus koneksi.");
-                            break;
-                        }
-                        Ok(bytes) if bytes == 12 && buf[0] == 0xAA => {
-                            let buttons_mask = u16::from_le_bytes([buf[1], buf[2]]);
-                            let mut raw_buttons = 0u16;
-                            
-                            if (buttons_mask & 1) != 0 { raw_buttons |= XButtons::A; }
-                            if (buttons_mask & 2) != 0 { raw_buttons |= XButtons::B; }
-                            if (buttons_mask & 4) != 0 { raw_buttons |= XButtons::X; }
-                            if (buttons_mask & 8) != 0 { raw_buttons |= XButtons::Y; }
-                            if (buttons_mask & 16) != 0 { raw_buttons |= XButtons::LB; }
-                            if (buttons_mask & 32) != 0 { raw_buttons |= XButtons::RB; }
-                            if (buttons_mask & 64) != 0 { raw_buttons |= XButtons::BACK; }
-                            if (buttons_mask & 128) != 0 { raw_buttons |= XButtons::START; }
-                            if (buttons_mask & 256) != 0 { raw_buttons |= XButtons::LTHUMB; }
-                            if (buttons_mask & 512) != 0 { raw_buttons |= XButtons::RTHUMB; }
+                    // Gunakan read_exact untuk mencegah spin loop akibat TCP fragmentasi
+                    match stream.read_exact(&mut buf) {
+                        Ok(()) => {
+                            if buf[0] == 0xAA {
+                                let buttons_mask = u16::from_le_bytes([buf[1], buf[2]]);
+                                let mut raw_buttons = 0u16;
+                                
+                                if (buttons_mask & 1) != 0 { raw_buttons |= XButtons::A; }
+                                if (buttons_mask & 2) != 0 { raw_buttons |= XButtons::B; }
+                                if (buttons_mask & 4) != 0 { raw_buttons |= XButtons::X; }
+                                if (buttons_mask & 8) != 0 { raw_buttons |= XButtons::Y; }
+                                if (buttons_mask & 16) != 0 { raw_buttons |= XButtons::LB; }
+                                if (buttons_mask & 32) != 0 { raw_buttons |= XButtons::RB; }
+                                if (buttons_mask & 64) != 0 { raw_buttons |= XButtons::BACK; }
+                                if (buttons_mask & 128) != 0 { raw_buttons |= XButtons::START; }
+                                if (buttons_mask & 256) != 0 { raw_buttons |= XButtons::LTHUMB; }
+                                if (buttons_mask & 512) != 0 { raw_buttons |= XButtons::RTHUMB; }
 
-                            let dpad = buf[9];
-                            if dpad == 0 || dpad == 1 || dpad == 7 { raw_buttons |= XButtons::UP; }
-                            if dpad == 2 || dpad == 1 || dpad == 3 { raw_buttons |= XButtons::RIGHT; }
-                            if dpad == 4 || dpad == 3 || dpad == 5 { raw_buttons |= XButtons::DOWN; }
-                            if dpad == 6 || dpad == 5 || dpad == 7 { raw_buttons |= XButtons::LEFT; }
+                                let dpad = buf[9];
+                                if dpad == 0 || dpad == 1 || dpad == 7 { raw_buttons |= XButtons::UP; }
+                                if dpad == 2 || dpad == 1 || dpad == 3 { raw_buttons |= XButtons::RIGHT; }
+                                if dpad == 4 || dpad == 3 || dpad == 5 { raw_buttons |= XButtons::DOWN; }
+                                if dpad == 6 || dpad == 5 || dpad == 7 { raw_buttons |= XButtons::LEFT; }
 
-                            let buttons = XButtons { raw: raw_buttons };
-                            
-                            let lx_i32 = (buf[3] as i32 - 128) * 256;
-                            let rx_i32 = (buf[5] as i32 - 128) * 256;
-                            let ly_i32 = (128 - buf[4] as i32) * 256;
-                            let ry_i32 = (128 - buf[6] as i32) * 256;
+                                let buttons = XButtons { raw: raw_buttons };
+                                
+                                let lx_i32 = (buf[3] as i32 - 128) * 256;
+                                let rx_i32 = (buf[5] as i32 - 128) * 256;
+                                let ly_i32 = (128 - buf[4] as i32) * 256;
+                                let ry_i32 = (128 - buf[6] as i32) * 256;
 
-                            let gamepad = XGamepad {
-                                buttons,
-                                left_trigger: buf[7],
-                                right_trigger: buf[8],
-                                thumb_lx: lx_i32.clamp(-32768, 32767) as i16,
-                                thumb_ly: ly_i32.clamp(-32768, 32767) as i16,
-                                thumb_rx: rx_i32.clamp(-32768, 32767) as i16,
-                                thumb_ry: ry_i32.clamp(-32768, 32767) as i16,
-                            };
-                            
-                            if let Err(e) = target.update(&gamepad) {
-                                println!("ViGEm Update Error: {:?}", e);
+                                let gamepad = XGamepad {
+                                    buttons,
+                                    left_trigger: buf[7],
+                                    right_trigger: buf[8],
+                                    thumb_lx: lx_i32.clamp(-32768, 32767) as i16,
+                                    thumb_ly: ly_i32.clamp(-32768, 32767) as i16,
+                                    thumb_rx: rx_i32.clamp(-32768, 32767) as i16,
+                                    thumb_ry: ry_i32.clamp(-32768, 32767) as i16,
+                                };
+                                
+                                let _ = target.update(&gamepad);
                             }
                         }
-                        Ok(_) => continue,
-                        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
-                            thread::sleep(Duration::from_millis(2));
-                            continue;
-                        }
                         Err(e) => {
-                            println!("Read Error: {}", e);
+                            println!("Android memutus koneksi: {}", e);
                             break;
                         }
                     }
                 }
+                
+                ctx.request_repaint(); // Update UI saat HP terputus
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 thread::sleep(Duration::from_millis(50));
@@ -306,7 +297,6 @@ fn run_android_server(is_running: Arc<AtomicBool>, ctx: egui::Context) {
         }
     }
     
-    // Minta UI update saat thread berhenti
     ctx.request_repaint();
 }
 
