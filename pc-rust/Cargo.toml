@@ -7,4 +7,7 @@ edition = "2021"
 eframe = "0.27.2" 
 gilrs = "0.10.6" 
 vigem-client = "0.1.4" 
-windows = { version = "0.53.0", features = ["Win32_UI_Input_KeyboardAndMouse"] }
+windows = { version = "0.53.0", features = [
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_Com"
+] }
