@@ -115,13 +115,17 @@ fn main() -> Result<(), eframe::Error> {
 }
 
 // =====================================================================
-//  LOGIKA LOCAL GOPHER (gilrs)
+//  LOGIKA LOCAL GOPHER (gilrs - FIXED)
 // =====================================================================
 fn run_local_gopher(is_running: Arc<AtomicBool>) {
     let mut gilrs = match Gilrs::new() {
         Ok(g) => g,
         Err(_) => return,
     };
+
+    let mut last_click = false;
+    let mut accum_x = 0.0;
+    let mut accum_y = 0.0;
 
     while is_running.load(Ordering::Relaxed) {
         while let Some(_event) = gilrs.next_event() {}
@@ -138,14 +142,33 @@ fn run_local_gopher(is_running: Arc<AtomicBool>) {
             let lx = gp.value(Axis::LeftStickX);
             let ly = gp.value(Axis::LeftStickY);
             
-            if lx.abs() > 0.1 || ly.abs() > 0.1 {
-                move_mouse((lx * 15.0) as i32, (ly * 15.0) as i32);
+            let deadzone = 0.15; 
+            if lx.abs() > deadzone || ly.abs() > deadzone {
+                accum_x += lx * 15.0;
+                accum_y += ly * 15.0;
+                
+                let dx = accum_x as i32;
+                let dy = accum_y as i32;
+                
+                if dx != 0 || dy != 0 {
+                    move_mouse(dx, dy);
+                    accum_x -= dx as f32;
+                    accum_y -= dy as f32;
+                }
+            } else {
+                accum_x = 0.0;
+                accum_y = 0.0;
             }
 
-            if gp.is_pressed(Button::South) {
-                mouse_click(true);
-            } else {
+            let current_click = gp.is_pressed(Button::South);
+            if current_click != last_click {
+                mouse_click(current_click);
+                last_click = current_click;
+            }
+        } else {
+            if last_click {
                 mouse_click(false);
+                last_click = false;
             }
         }
         
@@ -154,9 +177,17 @@ fn run_local_gopher(is_running: Arc<AtomicBool>) {
 }
 
 // =====================================================================
-//  LOGIKA ANDROID SERVER (TCP & ViGEmBus - FULL FIX)
+//  LOGIKA ANDROID SERVER (TCP & ViGEmBus - FIXED COM FREEZE)
 // =====================================================================
 fn run_android_server(is_running: Arc<AtomicBool>) {
+    // MENGATASI FREEZE: Inisialisasi COM agar driver ViGEmBus tidak hang
+    unsafe {
+        let _ = windows::Win32::System::Com::CoInitializeEx(
+            None,
+            windows::Win32::System::Com::COINIT_MULTITHREADED,
+        );
+    }
+
     let client = match Client::connect() {
         Ok(c) => c,
         Err(_) => {
@@ -238,7 +269,6 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
                             let lx_i32 = (buf[3] as i32 - 128) * 256;
                             let rx_i32 = (buf[5] as i32 - 128) * 256;
                             
-                            // Y dibalik (128 - nilai) karena XInput positif = Atas
                             let ly_i32 = (128 - buf[4] as i32) * 256;
                             let ry_i32 = (128 - buf[6] as i32) * 256;
 
