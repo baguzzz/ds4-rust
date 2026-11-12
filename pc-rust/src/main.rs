@@ -238,9 +238,9 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
                                 left_trigger: buf[7],   // L2
                                 right_trigger: buf[8],  // R2
                                 thumb_lx: ((buf[3] as i16 - 128) * 256) as i16,
-                                thumb_ly: ((buf[4] as i16 - 128) * 256) as i16,  // DIHAPUS MINUSNYA
+                                thumb_ly: -(((buf[4] as i16 - 128) * 256) as i16),  // DIHAPUS MINUSNYA
                                 thumb_rx: ((buf[5] as i16 - 128) * 256) as i16,
-                                thumb_ry: ((buf[6] as i16 - 128) * 256) as i16,  // DIHAPUS MINUSNYA
+                                thumb_ry: -(((buf[6] as i16 - 128) * 256) as i16),  // DIHAPUS MINUSNYA
                             };
                             
                             // [DEBUG] Cetak data untuk melihat apakah Android mengirim data dengan benar
