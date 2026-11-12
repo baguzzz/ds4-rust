@@ -5,6 +5,7 @@ use std::io::Read;
 use std::thread;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use vigem_client::{Client, TargetId, Xbox360Wired, XGamepad, XButtons};
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 
@@ -36,6 +37,9 @@ impl Default for DS4App {
 // =====================================================================
 impl eframe::App for DS4App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // PERBAIKAN: Paksa UI untuk terus berjalan agar thread input tidak tersendat
+        ctx.request_repaint_after(Duration::from_millis(16));
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("DS4 Unified - Rust Edition");
             ui.separator();
@@ -172,15 +176,14 @@ fn run_local_gopher(is_running: Arc<AtomicBool>) {
             }
         }
         
-        thread::sleep(std::time::Duration::from_millis(16));
+        thread::sleep(Duration::from_millis(16));
     }
 }
 
 // =====================================================================
-//  LOGIKA ANDROID SERVER (TCP & ViGEmBus - FIXED COM FREEZE)
+//  LOGIKA ANDROID SERVER (TCP & ViGEmBus - FIXED)
 // =====================================================================
 fn run_android_server(is_running: Arc<AtomicBool>) {
-    // MENGATASI FREEZE: Inisialisasi COM agar driver ViGEmBus tidak hang
     unsafe {
         let _ = windows::Win32::System::Com::CoInitializeEx(
             None,
@@ -222,7 +225,7 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
                 println!("Android Terhubung!");
                 
                 let _ = stream.set_nodelay(true);
-                let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(100)));
+                let _ = stream.set_read_timeout(Some(Duration::from_millis(100)));
                 
                 let mut buf = [0u8; 12];
                 
@@ -236,25 +239,17 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
                             let buttons_mask = u16::from_le_bytes([buf[1], buf[2]]);
                             let mut raw_buttons = 0u16;
                             
-                            // --- TOMBOL WAJAH ---
                             if (buttons_mask & 1) != 0 { raw_buttons |= XButtons::A; }
                             if (buttons_mask & 2) != 0 { raw_buttons |= XButtons::B; }
                             if (buttons_mask & 4) != 0 { raw_buttons |= XButtons::X; }
                             if (buttons_mask & 8) != 0 { raw_buttons |= XButtons::Y; }
-                            
-                            // --- BUMPER ---
                             if (buttons_mask & 16) != 0 { raw_buttons |= XButtons::LB; }
                             if (buttons_mask & 32) != 0 { raw_buttons |= XButtons::RB; }
-
-                            // --- START & BACK ---
                             if (buttons_mask & 64) != 0 { raw_buttons |= XButtons::BACK; }
                             if (buttons_mask & 128) != 0 { raw_buttons |= XButtons::START; }
-
-                            // --- STICK CLICKS ---
                             if (buttons_mask & 256) != 0 { raw_buttons |= XButtons::LTHUMB; }
                             if (buttons_mask & 512) != 0 { raw_buttons |= XButtons::RTHUMB; }
 
-                            // --- D-PAD ---
                             let dpad = buf[9];
                             if dpad == 0 || dpad == 1 || dpad == 7 { raw_buttons |= XButtons::UP; }
                             if dpad == 2 || dpad == 1 || dpad == 3 { raw_buttons |= XButtons::RIGHT; }
@@ -263,19 +258,15 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
 
                             let buttons = XButtons { raw: raw_buttons };
                             
-                            // ====================================================
-                            // PERBAIKAN FINAL ANALOG (Menggunakan i32 & clamp)
-                            // ====================================================
                             let lx_i32 = (buf[3] as i32 - 128) * 256;
                             let rx_i32 = (buf[5] as i32 - 128) * 256;
-                            
                             let ly_i32 = (128 - buf[4] as i32) * 256;
                             let ry_i32 = (128 - buf[6] as i32) * 256;
 
                             let gamepad = XGamepad {
                                 buttons,
-                                left_trigger: buf[7],   // L2
-                                right_trigger: buf[8],  // R2
+                                left_trigger: buf[7],
+                                right_trigger: buf[8],
                                 thumb_lx: lx_i32.clamp(-32768, 32767) as i16,
                                 thumb_ly: ly_i32.clamp(-32768, 32767) as i16,
                                 thumb_rx: rx_i32.clamp(-32768, 32767) as i16,
@@ -298,7 +289,7 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
                 }
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                thread::sleep(std::time::Duration::from_millis(50));
+                thread::sleep(Duration::from_millis(50));
             }
             Err(e) => {
                 println!("Accept Error: {}", e);
