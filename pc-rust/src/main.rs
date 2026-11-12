@@ -24,15 +24,10 @@ use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos};
 // =====================================================================
 //  KONSTANTA YANG HILANG DARI BINDINGS
 // =====================================================================
-// Offset untuk sumbu pada struct DIJOYSTATE2
 const DIJOFS_X: u32 = 0;
 const DIJOFS_Y: u32 = 4;
-const DIJOFS_RX: u32 = 16; // Sesuaikan jika perlu
-const DIJOFS_RY: u32 = 20; // Sesuaikan jika perlu
-
-// Format data untuk joystick. Ini adalah cara paling aman karena
-// bindings tidak menyediakan konstanta ini secara langsung.
-static mut C_DF_DIJOYSTICK2: [u8; 0] = []; // Placeholder
+const DIJOFS_RX: u32 = 16;
+const DIJOFS_RY: u32 = 20;
 
 // =====================================================================
 //  STATE GLOBAL UNTUK UI
@@ -129,7 +124,7 @@ fn main() -> Result<(), eframe::Error> {
 }
 
 // =====================================================================
-//  DIRECTINPUT SETUP (Diperbaiki)
+//  DIRECTINPUT SETUP (Final Fixed)
 // =====================================================================
 struct DiContext {
     found_guid: Option<GUID>,
@@ -147,7 +142,9 @@ unsafe extern "system" fn enum_callback(
 
 fn init_directinput() -> Option<(IDirectInput8W, IDirectInputDevice8W)> {
     unsafe {
-        CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
+        // FIX 1: Gunakan let _ = untuk mengabaikan hasil Result
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        
         let hinst: HINSTANCE = GetModuleHandleW(None).ok()?.into();
         
         let mut di_ptr: *mut c_void = ptr::null_mut();
@@ -155,7 +152,7 @@ fn init_directinput() -> Option<(IDirectInput8W, IDirectInputDevice8W)> {
             hinst,
             DIRECTINPUT_VERSION,
             &IDirectInput8W::IID,
-            &mut di_ptr as *mut *mut c_void, // PERBAIKAN: *mut *mut c_void
+            &mut di_ptr as *mut *mut c_void,
             None,
         ).ok()?;
         
@@ -172,21 +169,15 @@ fn init_directinput() -> Option<(IDirectInput8W, IDirectInputDevice8W)> {
         
         let guid = ctx.found_guid?;
         
-        // PERBAIKAN: CreateDevice menggunakan *mut Option<IDirectInputDevice8W>
         let mut device_opt: Option<IDirectInputDevice8W> = None;
-        di.CreateDevice(&guid, &mut device_opt).ok()?;
+        // FIX 2: Tambahkan None sebagai argumen ketiga
+        di.CreateDevice(&guid, &mut device_opt, None).ok()?;
         
         let device = device_opt?;
         
-        // PERBAIKAN: Gunakan placeholder untuk data format
-        // Di produksi, Anda harus mendefinisikan DIDATAFORMAT yang benar.
-        // Untuk sementara, kita lewati SetDataFormat dan berharap yang terbaik.
-        // device.SetDataFormat(&c_dfDIJoystick2).ok()?;
-        
-        // KUNCI UTAMA: DISCL_BACKGROUND agar bisa baca walau tidak fokus
+        // SetCooperativeLevel dengan DISCL_BACKGROUND agar bisa baca tanpa fokus
         device.SetCooperativeLevel(HWND(0), DISCL_BACKGROUND | DISCL_NONEXCLUSIVE).ok()?;
         
-        // PERBAIKAN: DIPROP_RANGE adalah GUID, konversi ke pointer
         let mut range = DIPROPRANGE {
             diph: DIPROPHEADER {
                 dwSize: std::mem::size_of::<DIPROPRANGE>() as u32,
@@ -198,7 +189,6 @@ fn init_directinput() -> Option<(IDirectInput8W, IDirectInputDevice8W)> {
             lMax: 32767,
         };
         
-        // Konversi GUID ke pointer *const GUID
         let prop_range_guid = &DIPROP_RANGE as *const GUID;
         let _ = device.SetProperty(prop_range_guid, &mut range.diph);
         
@@ -252,7 +242,6 @@ fn run_local_directinput(is_running: Arc<AtomicBool>, ctx: egui::Context) {
                 continue;
             }
 
-            // Normalisasi analog (-32768..32767 ke -1.0..1.0)
             let lx = (state.lX as f32) / 32767.0;
             let ly = (state.lY as f32) / 32767.0;
             
@@ -272,7 +261,6 @@ fn run_local_directinput(is_running: Arc<AtomicBool>, ctx: egui::Context) {
                 accum_y = 0.0;
             }
 
-            // Tombol 1 = Cross (klik kiri)
             let cross_pressed = (state.rgbButtons[1] & 0x80) != 0;
             if cross_pressed != last_click {
                 mouse_click(cross_pressed);
@@ -290,7 +278,7 @@ fn run_local_directinput(is_running: Arc<AtomicBool>, ctx: egui::Context) {
 }
 
 // =====================================================================
-//  ANDROID SERVER (Sama seperti sebelumnya)
+//  ANDROID SERVER (TCP & ViGEmBus)
 // =====================================================================
 fn run_android_server(is_running: Arc<AtomicBool>, ctx: egui::Context) {
     unsafe {
