@@ -37,8 +37,8 @@ impl Default for DS4App {
 // =====================================================================
 impl eframe::App for DS4App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Minta repaint setiap 30ms agar UI tidak membebani CPU (mengurangi stutter)
-        ctx.request_repaint_after(Duration::from_millis(30));
+        // TIDAK ADA request_repaint_after DI SINI.
+        // UI akan otomatis tidur (0% CPU) saat tidak ada aktivitas.
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("DS4 Unified - Rust Edition");
@@ -55,7 +55,8 @@ impl eframe::App for DS4App {
                         if new_running {
                             self.local_status = "Status: Aktif (Mengontrol Mouse)".to_string();
                             let r = self.is_local_running.clone();
-                            thread::spawn(move || run_local_gopher(r));
+                            let ctx_clone = ctx.clone();
+                            thread::spawn(move || run_local_gopher(r, ctx_clone));
                         } else {
                             self.local_status = "Status: Mati".to_string();
                         }
@@ -68,7 +69,7 @@ impl eframe::App for DS4App {
 
             // --- TAB 2: ANDROID SERVER ---
             ui.group(|ui| {
-                ui.label("Android Server (Wi-Fi) -> Membuat Virtual Xbox Controller");
+                ui.label("Android Server (Wi-Fi) -> Virtual Xbox Controller");
                 ui.horizontal(|ui| {
                     let is_running = self.is_server_running.load(Ordering::Relaxed);
                     if ui.button(if is_running { "Hentikan Server TCP" } else { "Mulai Server TCP" }).clicked() {
@@ -77,7 +78,8 @@ impl eframe::App for DS4App {
                         if new_running {
                             self.server_status = "Status: Menunggu Android...".to_string();
                             let r = self.is_server_running.clone();
-                            thread::spawn(move || run_android_server(r));
+                            let ctx_clone = ctx.clone();
+                            thread::spawn(move || run_android_server(r, ctx_clone));
                         } else {
                             self.server_status = "Status: Mati".to_string();
                         }
@@ -109,7 +111,7 @@ impl eframe::App for DS4App {
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([600.0, 450.0]),
-        vsync: true, // Wajib nyala agar tidak rebutan CPU dengan game/browser
+        vsync: true, 
         ..Default::default()
     };
     eframe::run_native(
@@ -122,7 +124,7 @@ fn main() -> Result<(), eframe::Error> {
 // =====================================================================
 //  LOGIKA LOCAL GOPHER (gilrs)
 // =====================================================================
-fn run_local_gopher(is_running: Arc<AtomicBool>) {
+fn run_local_gopher(is_running: Arc<AtomicBool>, ctx: egui::Context) {
     let mut gilrs = match Gilrs::new() {
         Ok(g) => g,
         Err(_) => return,
@@ -177,15 +179,18 @@ fn run_local_gopher(is_running: Arc<AtomicBool>) {
             }
         }
         
+        // Jeda 16ms (60 FPS) untuk membaca input
         thread::sleep(Duration::from_millis(16));
     }
+    
+    // Minta UI update saat thread berhenti
+    ctx.request_repaint();
 }
 
 // =====================================================================
 //  LOGIKA ANDROID SERVER (TCP & ViGEmBus)
 // =====================================================================
-fn run_android_server(is_running: Arc<AtomicBool>) {
-    // Inisialisasi COM model STA (lebih stabil untuk background thread & driver)
+fn run_android_server(is_running: Arc<AtomicBool>, ctx: egui::Context) {
     unsafe {
         let _ = windows::Win32::System::Com::CoInitializeEx(
             None,
@@ -281,7 +286,6 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
                         }
                         Ok(_) => continue,
                         Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
-                            // Jeda mikro agar thread tidak spin dan membebani CPU
                             thread::sleep(Duration::from_millis(2));
                             continue;
                         }
@@ -301,6 +305,9 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
             }
         }
     }
+    
+    // Minta UI update saat thread berhenti
+    ctx.request_repaint();
 }
 
 // =====================================================================
