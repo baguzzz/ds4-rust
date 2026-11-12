@@ -49,12 +49,13 @@ public class MainActivity extends AppCompatActivity {
     private boolean isEditMode = false;
     private SharedPreferences prefs;
 
-    // State
+    // State Gamepad (Data yang akan dikirim ke PC)
     private volatile int buttons = 0;
     private volatile int lx = 128, ly = 128, rx = 128, ry = 128;
     private volatile int l2 = 0, r2 = 0;
-    private volatile int dpad = 8;
+    private volatile int dpad = 8; // 8 = Netral
 
+    // Indeks Bit untuk Tombol (Sesuai dengan Rust PC)
     private static final int BTN_CROSS=0, BTN_CIRCLE=1, BTN_SQUARE=2, BTN_TRIANGLE=3, BTN_L1=4, BTN_R1=5,
             BTN_SHARE=6, BTN_OPTIONS=7, BTN_L3=8, BTN_R3=9, BTN_PS=10, BTN_TOUCHPAD=11;
 
@@ -104,6 +105,7 @@ public class MainActivity extends AppCompatActivity {
         JoystickView leftStick = findViewById(R.id.leftStick);
         JoystickView rightStick = findViewById(R.id.rightStick);
 
+        // --- Setup Analog Sticks ---
         leftStick.setOnMoveListener((x, y) -> {
             if (isEditMode) return;
             lx = clamp255((x + 1f) / 2f * 255f);
@@ -118,27 +120,31 @@ public class MainActivity extends AppCompatActivity {
         applyEditTouchOnly(leftStick);
         applyEditTouchOnly(rightStick);
 
+        // --- Setup Tombol Biasa (A, B, X, Y, L1, R1, Start, Back, dll) ---
         setupButton(R.id.btnA, BTN_CROSS);
         setupButton(R.id.btnB, BTN_CIRCLE);
         setupButton(R.id.btnX, BTN_SQUARE);
         setupButton(R.id.btnY, BTN_TRIANGLE);
         setupButton(R.id.btnL1, BTN_L1);
         setupButton(R.id.btnR1, BTN_R1);
-        setupButton(R.id.btnShare, BTN_SHARE);
-        setupButton(R.id.btnOptions, BTN_OPTIONS);
+        setupButton(R.id.btnShare, BTN_SHARE);       // Back / Share
+        setupButton(R.id.btnOptions, BTN_OPTIONS);   // Start / Options
         setupButton(R.id.btnL3, BTN_L3);
         setupButton(R.id.btnR3, BTN_R3);
         setupButton(R.id.btnPS, BTN_PS);
         setupButton(R.id.btnTouchpad, BTN_TOUCHPAD);
 
+        // --- Setup Trigger L2 / R2 ---
         setupTrigger(R.id.btnL2, true);
         setupTrigger(R.id.btnR2, false);
 
+        // --- Setup D-Pad ---
         setupDpad(R.id.dpadUp, 0);
         setupDpad(R.id.dpadRight, 2);
         setupDpad(R.id.dpadDown, 4);
         setupDpad(R.id.dpadLeft, 6);
 
+        // --- Tombol UI ---
         editLayoutBtn.setOnClickListener(v -> {
             isEditMode = !isEditMode;
             if (isEditMode) {
@@ -181,11 +187,200 @@ public class MainActivity extends AppCompatActivity {
             else connect(ipInput.getText().toString().trim());
         });
 
-        loadLayout();
+        gamepadArea.post(this::loadLayout);
         startSendLoop();
     }
 
-    // ================= LAYOUT EDITOR & CONFIG =================
+    // ================= LOGIKA PENGIRIMAN DATA (TCP) =================
+    private void connect(String ip) {
+        if (ip.isEmpty()) { Toast.makeText(this, "Masukkan IP PC", Toast.LENGTH_SHORT).show(); return; }
+        statusText.setText("⏳ Menghubungkan...");
+        connectBtn.setEnabled(false);
+
+        new Thread(() -> {
+            try {
+                Socket newSocket = new Socket();
+                newSocket.connect(new InetSocketAddress(ip, 27020), 3000);
+                newSocket.setTcpNoDelay(true);
+                socket = newSocket;
+                output = socket.getOutputStream();
+                connected.set(true);
+                uiHandler.post(() -> {
+                    statusText.setText("✅ Terhubung ke " + ip);
+                    connectBtn.setText("Disconnect");
+                    connectBtn.setEnabled(true);
+                });
+            } catch (IOException ex) {
+                final String errMsg = ex.getMessage() != null ? ex.getMessage() : ex.toString();
+                uiHandler.post(() -> {
+                    statusText.setText("❌ Gagal: " + errMsg);
+                    connectBtn.setText("Connect");
+                    connectBtn.setEnabled(true);
+                });
+            }
+        }).start();
+    }
+
+    private void disconnect() {
+        connected.set(false);
+        try { if (socket != null) socket.close(); } catch (IOException ignored) {}
+        socket = null; output = null;
+        runOnUiThread(() -> {
+            statusText.setText("Terputus");
+            connectBtn.setText("Connect");
+            connectBtn.setEnabled(true);
+        });
+    }
+
+    private void startSendLoop() {
+        new Thread(() -> {
+            while (!Thread.interrupted()) {
+                if (connected.get()) {
+                    try { sendPacket(); } catch (IOException ex) { disconnect(); }
+                }
+                try { Thread.sleep(SEND_INTERVAL_MS); } catch (InterruptedException e) { return; }
+            }
+        }).start();
+    }
+
+    private void sendPacket() throws IOException {
+        OutputStream out = this.output;
+        if (out == null) return;
+        
+        byte[] p = new byte[PACKET_SIZE];
+        p[0] = SYNC;
+        p[1] = (byte)(buttons & 0xFF);
+        p[2] = (byte)((buttons >> 8) & 0xFF);
+        p[3] = (byte) lx;
+        p[4] = (byte) ly;
+        p[5] = (byte) rx;
+        p[6] = (byte) ry;
+        p[7] = (byte) l2;
+        p[8] = (byte) r2;
+        p[9] = (byte) dpad;
+        p[10] = 0;
+        
+        byte ck = 0;
+        for (int i = 1; i < PACKET_SIZE - 1; i++) ck ^= p[i];
+        p[PACKET_SIZE - 1] = ck;
+        
+        out.write(p);
+    }
+
+    // ================= HANDLER TOMBOL =================
+    private static int clamp255(float v) {
+        return (int) Math.max(0, Math.min(255, v));
+    }
+
+    private void setupButton(int id, int bitIdx) {
+        Button b = findViewById(id);
+        applyEditAndGamepadTouch(b, 
+            () -> { if (!isEditMode) buttons |= (1 << bitIdx); },
+            () -> { if (!isEditMode) buttons &= ~(1 << bitIdx); }
+        );
+    }
+
+    private void setupTrigger(int id, boolean isL2) {
+        Button b = findViewById(id);
+        applyEditAndGamepadTouch(b, 
+            () -> { if (!isEditMode) { if (isL2) l2 = 255; else r2 = 255; } },
+            () -> { if (!isEditMode) { if (isL2) l2 = 0; else r2 = 0; } }
+        );
+    }
+
+    private void setupDpad(int id, int dpadValue) {
+        View b = findViewById(id);
+        applyEditAndGamepadTouch(b, 
+            () -> { if (!isEditMode) dpad = dpadValue; },
+            () -> { if (!isEditMode) dpad = 8; } // 8 = Netral
+        );
+    }
+
+    // ================= LOGIKA EDIT LAYOUT (GESER) =================
+    private void applyEditAndGamepadTouch(View view, Runnable onPress, Runnable onRelease) {
+        view.setOnTouchListener(new View.OnTouchListener() {
+            float startX, startY, initialX, initialY;
+
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                if (isEditMode) {
+                    switch (event.getActionMasked()) {
+                        case MotionEvent.ACTION_DOWN:
+                            startX = event.getRawX();
+                            startY = event.getRawY();
+                            initialX = v.getX();
+                            initialY = v.getY();
+                            return true;
+                        case MotionEvent.ACTION_MOVE:
+                            float dx = event.getRawX() - startX;
+                            float dy = event.getRawY() - startY;
+                            
+                            float newX = initialX + dx;
+                            float newY = initialY + dy;
+                            
+                            float maxX = gamepadArea.getWidth() - v.getWidth();
+                            float maxY = gamepadArea.getHeight() - v.getHeight();
+                            
+                            newX = Math.max(0, Math.min(newX, maxX));
+                            newY = Math.max(0, Math.min(newY, maxY));
+                            
+                            v.setX(newX);
+                            v.setY(newY);
+                            return true;
+                    }
+                    return true;
+                } else {
+                    switch (event.getActionMasked()) {
+                        case MotionEvent.ACTION_DOWN:
+                            if (onPress != null) onPress.run();
+                            return true;
+                        case MotionEvent.ACTION_UP:
+                        case MotionEvent.ACTION_CANCEL:
+                            if (onRelease != null) onRelease.run();
+                            return true;
+                    }
+                    return false;
+                }
+            }
+        });
+    }
+
+    private void applyEditTouchOnly(View view) {
+        view.setOnTouchListener(new View.OnTouchListener() {
+            float startX, startY, initialX, initialY;
+
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                if (!isEditMode) return false;
+
+                switch (event.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        startX = event.getRawX();
+                        startY = event.getRawY();
+                        initialX = v.getX();
+                        initialY = v.getY();
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        float dx = event.getRawX() - startX;
+                        float dy = event.getRawY() - startY;
+                        
+                        float newX = initialX + dx;
+                        float newY = initialY + dy;
+                        
+                        float maxX = gamepadArea.getWidth() - v.getWidth();
+                        float maxY = gamepadArea.getHeight() - v.getHeight();
+                        
+                        newX = Math.max(0, Math.min(newX, maxX));
+                        newY = Math.max(0, Math.min(newY, maxY));
+                        
+                        v.setX(newX);
+                        v.setY(newY);
+                        return true;
+                }
+                return true;
+            }
+        });
+    }
 
     private void loadLayout() {
         boolean loaded = false;
@@ -194,19 +389,16 @@ public class MainActivity extends AppCompatActivity {
             if (child != null) {
                 String idName = getResources().getResourceEntryName(id);
                 if (prefs.contains(idName + "_x")) {
-                    child.setX(prefs.getFloat(idName + "_x", 0f));
-                    child.setY(prefs.getFloat(idName + "_y", 0f));
-                    ViewGroup.LayoutParams params = child.getLayoutParams();
-                    params.width = prefs.getInt(idName + "_w", params.width);
-                    params.height = prefs.getInt(idName + "_h", params.height);
-                    child.setLayoutParams(params);
+                    float x = prefs.getFloat(idName + "_x", 0f);
+                    float y = prefs.getFloat(idName + "_y", 0f);
+                    int w = prefs.getInt(idName + "_w", child.getWidth());
+                    int h = prefs.getInt(idName + "_h", child.getHeight());
+                    applyClampedPosition(child, x, y, w, h);
                     loaded = true;
                 }
             }
         }
-        if (!loaded) {
-            loadDefaultFromJson();
-        }
+        if (!loaded) loadDefaultFromJson();
     }
 
     private void loadDefaultFromJson() {
@@ -240,16 +432,11 @@ public class MainActivity extends AppCompatActivity {
                         int w = (int) (props.getInt("w") * density);
                         int h = (int) (props.getInt("h") * density);
 
-                        child.setX(x);
-                        child.setY(y);
-                        ViewGroup.LayoutParams params = child.getLayoutParams();
-                        params.width = w;
-                        params.height = h;
-                        child.setLayoutParams(params);
+                        applyClampedPosition(child, x, y, w, h);
 
                         if (saveToPrefs) {
-                            editor.putFloat(idName + "_x", x);
-                            editor.putFloat(idName + "_y", y);
+                            editor.putFloat(idName + "_x", child.getX());
+                            editor.putFloat(idName + "_y", child.getY());
                             editor.putInt(idName + "_w", w);
                             editor.putInt(idName + "_h", h);
                         }
@@ -262,16 +449,24 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void applyClampedPosition(View child, float x, float y, int w, int h) {
+        ViewGroup.LayoutParams params = child.getLayoutParams();
+        params.width = w;
+        params.height = h;
+        child.setLayoutParams(params);
+
+        float maxX = gamepadArea.getWidth() - w;
+        float maxY = gamepadArea.getHeight() - h;
+
+        float clampedX = Math.max(0, Math.min(x, maxX));
+        float clampedY = Math.max(0, Math.min(y, maxY));
+
+        child.setX(clampedX);
+        child.setY(clampedY);
+    }
+
     private void resetLayout() {
         prefs.edit().clear().apply();
-        // Kembalikan ke posisi semula dari XML (Margin)
-        for (int id : allIds) {
-            View child = findViewById(id);
-            if (child != null) {
-                child.setTranslationX(0f);
-                child.setTranslationY(0f);
-            }
-        }
         loadDefaultFromJson();
     }
 
@@ -328,199 +523,12 @@ public class MainActivity extends AppCompatActivity {
             is.read(buffer);
             is.close();
             String json = new String(buffer, StandardCharsets.UTF_8);
-            
             applyJsonLayout(json, true);
             Toast.makeText(this, "Import layout berhasil!", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
             e.printStackTrace();
             Toast.makeText(this, "Gagal import: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
-    }
-
-    private void applyEditAndGamepadTouch(View view, Runnable onPress, Runnable onRelease) {
-        view.setOnTouchListener(new View.OnTouchListener() {
-            float startX, startY, initialX, initialY;
-
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                if (isEditMode) {
-                    switch (event.getActionMasked()) {
-                        case MotionEvent.ACTION_DOWN:
-                            startX = event.getRawX();
-                            startY = event.getRawY();
-                            initialX = v.getX();
-                            initialY = v.getY();
-                            return true;
-                        case MotionEvent.ACTION_MOVE:
-                            float dx = event.getRawX() - startX;
-                            float dy = event.getRawY() - startY;
-                            
-                            float newX = initialX + dx;
-                            float newY = initialY + dy;
-                            
-                            // === PEMBATAS LAYAR (CLAMPING) ===
-                            float maxX = gamepadArea.getWidth() - v.getWidth();
-                            float maxY = gamepadArea.getHeight() - v.getHeight();
-                            
-                            newX = Math.max(0, Math.min(newX, maxX));
-                            newY = Math.max(0, Math.min(newY, maxY));
-                            
-                            v.setX(newX);
-                            v.setY(newY);
-                            return true;
-                    }
-                    return true;
-                } else {
-                    switch (event.getActionMasked()) {
-                        case MotionEvent.ACTION_DOWN:
-                            if (onPress != null) onPress.run();
-                            return true;
-                        case MotionEvent.ACTION_UP:
-                        case MotionEvent.ACTION_CANCEL:
-                            if (onRelease != null) onRelease.run();
-                            return true;
-                    }
-                    return false;
-                }
-            }
-        });
-    }
-
-    private void applyEditTouchOnly(View view) {
-        view.setOnTouchListener(new View.OnTouchListener() {
-            float startX, startY, initialX, initialY;
-
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                if (!isEditMode) return false;
-
-                switch (event.getActionMasked()) {
-                    case MotionEvent.ACTION_DOWN:
-                        startX = event.getRawX();
-                        startY = event.getRawY();
-                        initialX = v.getX();
-                        initialY = v.getY();
-                        return true;
-                    case MotionEvent.ACTION_MOVE:
-                        float dx = event.getRawX() - startX;
-                        float dy = event.getRawY() - startY;
-                        
-                        float newX = initialX + dx;
-                        float newY = initialY + dy;
-                        
-                        // === PEMBATAS LAYAR (CLAMPING) ===
-                        float maxX = gamepadArea.getWidth() - v.getWidth();
-                        float maxY = gamepadArea.getHeight() - v.getHeight();
-                        
-                        newX = Math.max(0, Math.min(newX, maxX));
-                        newY = Math.max(0, Math.min(newY, maxY));
-                        
-                        v.setX(newX);
-                        v.setY(newY);
-                        return true;
-                }
-                return true;
-            }
-        });
-    }
-
-    // ================= INPUT HANDLERS =================
-    private static int clamp255(float v) {
-        return (int) Math.max(0, Math.min(255, v));
-    }
-
-    private void setupButton(int id, int bitIdx) {
-        Button b = findViewById(id);
-        applyEditAndGamepadTouch(b, 
-            () -> { if (!isEditMode) buttons |= (1 << bitIdx); },
-            () -> { if (!isEditMode) buttons &= ~(1 << bitIdx); }
-        );
-    }
-
-    private void setupTrigger(int id, boolean isL2) {
-        Button b = findViewById(id);
-        applyEditAndGamepadTouch(b, 
-            () -> { if (!isEditMode) { if (isL2) l2 = 255; else r2 = 255; } },
-            () -> { if (!isEditMode) { if (isL2) l2 = 0; else r2 = 0; } }
-        );
-    }
-
-    private void setupDpad(int id, int dpadValue) {
-        View b = findViewById(id);
-        applyEditAndGamepadTouch(b, 
-            () -> { if (!isEditMode) dpad = dpadValue; },
-            () -> { if (!isEditMode) dpad = 8; }
-        );
-    }
-
-    // ================= NETWORKING =================
-    private void connect(String ip) {
-        if (ip.isEmpty()) { Toast.makeText(this, "Masukkan IP PC", Toast.LENGTH_SHORT).show(); return; }
-        statusText.setText("⏳ Menghubungkan...");
-        connectBtn.setEnabled(false);
-
-        new Thread(() -> {
-            try {
-                Socket newSocket = new Socket();
-                newSocket.connect(new InetSocketAddress(ip, 27020), 3000);
-                newSocket.setTcpNoDelay(true);
-                socket = newSocket;
-                output = socket.getOutputStream();
-                connected.set(true);
-                uiHandler.post(() -> {
-                    statusText.setText("✅ Terhubung ke " + ip);
-                    connectBtn.setText("Disconnect");
-                    connectBtn.setEnabled(true);
-                });
-            } catch (IOException ex) {
-                final String errMsg = ex.getMessage() != null ? ex.getMessage() : ex.toString();
-                uiHandler.post(() -> {
-                    statusText.setText("❌ Gagal: " + errMsg);
-                    connectBtn.setText("Connect");
-                    connectBtn.setEnabled(true);
-                });
-            }
-        }).start();
-    }
-
-    private void disconnect() {
-        connected.set(false);
-        try { if (socket != null) socket.close(); } catch (IOException ignored) {}
-        socket = null; output = null;
-        runOnUiThread(() -> {
-            statusText.setText("Terputus");
-            connectBtn.setText("Connect");
-            connectBtn.setEnabled(true);
-        });
-    }
-
-    private void startSendLoop() {
-        new Thread(() -> {
-            while (!Thread.interrupted()) {
-                if (connected.get()) {
-                    try { sendPacket(); } catch (IOException ex) { disconnect(); }
-                }
-                try { Thread.sleep(SEND_INTERVAL_MS); } catch (InterruptedException e) { return; }
-            }
-        }).start();
-    }
-
-    private void sendPacket() throws IOException {
-        OutputStream out = this.output;
-        if (out == null) return;
-        byte[] p = new byte[PACKET_SIZE];
-        p[0] = SYNC;
-        p[1] = (byte)(buttons & 0xFF);
-        p[2] = (byte)((buttons >> 8) & 0xFF);
-        p[3] = (byte) lx; p[4] = (byte) ly;
-        p[5] = (byte) rx; p[6] = (byte) ry;
-        p[7] = (byte) l2; p[8] = (byte) r2;
-        p[9] = (byte) dpad;
-        p[10] = 0;
-        byte ck = 0;
-        for (int i = 1; i < PACKET_SIZE - 1; i++) ck ^= p[i];
-        p[PACKET_SIZE - 1] = ck;
-        out.write(p);
     }
 
     @Override
