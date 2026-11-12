@@ -7,7 +7,9 @@ use std::sync::{Arc, Mutex};
 use vigem_client::{Client, TargetId, Xbox360Wired, XGamepad, XButtons};
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 
-// State global untuk UI
+// =====================================================================
+//  STATE GLOBAL UNTUK UI
+// =====================================================================
 struct DS4App {
     local_status: String,
     server_status: String,
@@ -28,6 +30,9 @@ impl Default for DS4App {
     }
 }
 
+// =====================================================================
+//  IMPLEMENTASI UI (EGUI)
+// =====================================================================
 impl eframe::App for DS4App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -35,56 +40,68 @@ impl eframe::App for DS4App {
             ui.separator();
 
             // --- TAB 1: LOCAL CONTROLLER ---
-            ui.horizontal(|ui| {
-                if ui.button(if *self.is_local_running.lock().unwrap() { "Hentikan Gopher Lokal" } else { "Mulai Gopher Lokal" }).clicked() {
-                    let mut running = self.is_local_running.lock().unwrap();
-                    *running = !*running;
-                    if *running {
-                        self.local_status = "Status: Aktif (Membaca USB)".to_string();
-                        let r = self.is_local_running.clone();
-                        thread::spawn(move || run_local_gopher(r));
-                    } else {
-                        self.local_status = "Status: Mati".to_string();
+            ui.group(|ui| {
+                ui.label("Local Controller (USB/BT)");
+                ui.horizontal(|ui| {
+                    if ui.button(if *self.is_local_running.lock().unwrap() { "Hentikan Gopher Lokal" } else { "Mulai Gopher Lokal" }).clicked() {
+                        let mut running = self.is_local_running.lock().unwrap();
+                        *running = !*running;
+                        if *running {
+                            self.local_status = "Status: Aktif (Membaca USB)".to_string();
+                            let r = self.is_local_running.clone();
+                            thread::spawn(move || run_local_gopher(r));
+                        } else {
+                            self.local_status = "Status: Mati".to_string();
+                        }
                     }
-                }
-                ui.label(&self.local_status);
+                    ui.label(&self.local_status);
+                });
             });
 
             ui.separator();
 
             // --- TAB 2: ANDROID SERVER ---
-            ui.horizontal(|ui| {
-                if ui.button(if *self.is_server_running.lock().unwrap() { "Hentikan Server TCP" } else { "Mulai Server TCP" }).clicked() {
-                    let mut running = self.is_server_running.lock().unwrap();
-                    *running = !*running;
-                    if *running {
-                        self.server_status = "Status: Menunggu Android...".to_string();
-                        let r = self.is_server_running.clone();
-                        thread::spawn(move || run_android_server(r));
-                    } else {
-                        self.server_status = "Status: Mati".to_string();
+            ui.group(|ui| {
+                ui.label("Android Server (Wi-Fi)");
+                ui.horizontal(|ui| {
+                    if ui.button(if *self.is_server_running.lock().unwrap() { "Hentikan Server TCP" } else { "Mulai Server TCP" }).clicked() {
+                        let mut running = self.is_server_running.lock().unwrap();
+                        *running = !*running;
+                        if *running {
+                            self.server_status = "Status: Menunggu Android...".to_string();
+                            let r = self.is_server_running.clone();
+                            thread::spawn(move || run_android_server(r));
+                        } else {
+                            self.server_status = "Status: Mati".to_string();
+                        }
                     }
-                }
-                ui.label(&self.server_status);
-            });
+                    ui.label(&self.server_status);
+                });
 
-            ui.horizontal(|ui| {
-                ui.label("IP PC (Masukkan ke Android):");
-                ui.text_edit_singleline(&mut self.ip_address.clone());
+                ui.horizontal(|ui| {
+                    ui.label("IP PC (Masukkan ke Android):");
+                    ui.text_edit_singleline(&mut self.ip_address.clone());
+                });
             });
 
             ui.separator();
 
             // --- TAB 3: CONFIG INFO ---
-            ui.label("Config Editor: Silakan buka file 'config-editor.html' di browser Anda.");
-            ui.label("Atur tombol sesuka hati, lalu simpan 'config.ini' di folder yang sama.");
+            ui.group(|ui| {
+                ui.label("Config Editor:");
+                ui.label("Silakan buka file 'config-editor.html' di browser Anda.");
+                ui.label("Atur tombol sesuka hati, lalu simpan 'config.ini' di folder yang sama.");
+            });
         });
     }
 }
 
+// =====================================================================
+//  ENTRY POINT
+// =====================================================================
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([600.0, 400.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([600.0, 450.0]),
         ..Default::default()
     };
     eframe::run_native(
@@ -94,11 +111,17 @@ fn main() -> Result<(), eframe::Error> {
     )
 }
 
-// ================= LOGIKA LOCAL GOPHER =================
+// =====================================================================
+//  LOGIKA LOCAL GOPHER (gilrs)
+// =====================================================================
 fn run_local_gopher(is_running: Arc<Mutex<bool>>) {
-    let mut gilrs = Gilrs::new().unwrap();
+    let mut gilrs = match Gilrs::new() {
+        Ok(g) => g,
+        Err(_) => return, // Gagal inisialisasi gamepad
+    };
 
     while *is_running.lock().unwrap() {
+        // Baca event untuk update state
         while let Some(_event) = gilrs.next_event() {}
         
         let mut gamepad = None;
@@ -110,6 +133,7 @@ fn run_local_gopher(is_running: Arc<Mutex<bool>>) {
         }
 
         if let Some(gp) = gamepad {
+            // Baca Analog Kiri (Mouse)
             let lx = gp.value(Axis::LeftStickX);
             let ly = gp.value(Axis::LeftStickY);
             
@@ -117,6 +141,7 @@ fn run_local_gopher(is_running: Arc<Mutex<bool>>) {
                 move_mouse((lx * 15.0) as i32, (ly * 15.0) as i32);
             }
 
+            // Baca Tombol Cross (Biasanya South / A)
             if gp.is_pressed(Button::South) {
                 mouse_click(true);
             } else {
@@ -128,18 +153,30 @@ fn run_local_gopher(is_running: Arc<Mutex<bool>>) {
     }
 }
 
-// ================= LOGIKA ANDROID SERVER =================
+// =====================================================================
+//  LOGIKA ANDROID SERVER (TCP & ViGEmBus)
+// =====================================================================
 fn run_android_server(is_running: Arc<Mutex<bool>>) {
-    let client = Client::connect().expect("ViGEmBus tidak terinstal!");
+    let client = match Client::connect() {
+        Ok(c) => c,
+        Err(_) => {
+            println!("ViGEmBus tidak terinstal!");
+            return;
+        }
+    };
     
-    // Beralih ke Xbox360Wired yang jauh lebih stabil
     let id = TargetId::XBOX360_WIRED;
     let mut target = Xbox360Wired::new(client, id);
     
-    target.plugin().expect("Gagal memasang virtual controller");
-    target.wait_ready().expect("Virtual controller belum siap");
+    if target.plugin().is_err() || target.wait_ready().is_err() {
+        println!("Gagal memasang virtual controller");
+        return;
+    }
 
-    let listener = TcpListener::bind("0.0.0.0:27020").expect("Gagal bind port");
+    let listener = match TcpListener::bind("0.0.0.0:27020") {
+        Ok(l) => l,
+        Err(_) => return,
+    };
     listener.set_nonblocking(true).unwrap();
 
     println!("Server TCP berjalan di port 27020...");
@@ -155,15 +192,22 @@ fn run_android_server(is_running: Arc<Mutex<bool>>) {
                         if bytes == 12 && buf[0] == 0xAA {
                             let buttons_mask = u16::from_le_bytes([buf[1], buf[2]]);
                             
-                            // Konversi bitmask dari Android ke XGamepad
-                            let mut buttons = XButtons::default();
-                            if (buttons_mask & 1) != 0 { buttons = buttons | XButtons::A; }
-                            if (buttons_mask & 2) != 0 { buttons = buttons | XButtons::B; }
-                            if (buttons_mask & 4) != 0 { buttons = buttons | XButtons::X; }
-                            if (buttons_mask & 8) != 0 { buttons = buttons | XButtons::Y; }
-                            if (buttons_mask & 16) != 0 { buttons = buttons | XButtons::LB; }
-                            if (buttons_mask & 32) != 0 { buttons = buttons | XButtons::RB; }
+                            // Rakit tombol dalam variabel u16 terlebih dahulu
+                            let mut raw_buttons = 0u16;
+                            
+                            if (buttons_mask & 1) != 0 { raw_buttons |= XButtons::A; }
+                            if (buttons_mask & 2) != 0 { raw_buttons |= XButtons::B; }
+                            if (buttons_mask & 4) != 0 { raw_buttons |= XButtons::X; }
+                            if (buttons_mask & 8) != 0 { raw_buttons |= XButtons::Y; }
+                            
+                            // L1 dan R1 di Xbox360 bernama ShoulderLeft & ShoulderRight
+                            if (buttons_mask & 16) != 0 { raw_buttons |= XButtons::ShoulderLeft; }
+                            if (buttons_mask & 32) != 0 { raw_buttons |= XButtons::ShoulderRight; }
 
+                            // Bungkus ke dalam struct XButtons
+                            let buttons = XButtons { raw: raw_buttons };
+
+                            // Buat state gamepad
                             let gamepad = XGamepad {
                                 buttons,
                                 thumb_lx: ((buf[3] as i16 - 128) * 256) as i16,
@@ -188,7 +232,9 @@ fn run_android_server(is_running: Arc<Mutex<bool>>) {
     }
 }
 
-// ================= UTILS WINDOWS API =================
+// =====================================================================
+//  UTILS: WINDOWS API (Mouse & IP)
+// =====================================================================
 fn move_mouse(dx: i32, dy: i32) {
     let input = INPUT {
         r#type: INPUT_MOUSE,
@@ -221,7 +267,12 @@ fn mouse_click(down: bool) {
 
 fn get_local_ip() -> String {
     use std::net::UdpSocket;
-    let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
-    socket.connect("8.8.8.8:80").unwrap();
-    socket.local_addr().unwrap().ip().to_string()
+    let socket = match UdpSocket::bind("0.0.0.0:0") {
+        Ok(s) => s,
+        Err(_) => return "127.0.0.1".to_string(),
+    };
+    if socket.connect("8.8.8.8:80").is_err() {
+        return "127.0.0.1".to_string();
+    }
+    socket.local_addr().map(|a| a.ip().to_string()).unwrap_or_else(|_| "127.0.0.1".to_string())
 }
