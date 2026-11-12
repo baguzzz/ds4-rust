@@ -1,13 +1,19 @@
 use eframe::egui;
-use gilrs::{Gilrs, Button, Axis};
 use std::net::TcpListener;
 use std::io::Read;
 use std::thread;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use std::ffi::c_void;
 use vigem_client::{Client, TargetId, Xbox360Wired, XGamepad, XButtons};
+use windows::core::{Interface, GUID};
+use windows::Win32::Devices::DirectInput::*;
+use windows::Win32::Foundation::{BOOL, FALSE, HINSTANCE, POINT};
+use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
+use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos};
 
 // =====================================================================
 //  STATE GLOBAL UNTUK UI
@@ -32,16 +38,12 @@ impl Default for DS4App {
     }
 }
 
-// =====================================================================
-//  IMPLEMENTASI UI (EGUI)
-// =====================================================================
 impl eframe::App for DS4App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("DS4 Unified - Rust Edition");
+            ui.heading("DS4 Unified - Rust Edition (DirectInput)");
             ui.separator();
 
-            // --- TAB 1: LOCAL CONTROLLER ---
             ui.group(|ui| {
                 ui.label("Local Controller (USB/BT) -> Menggerakkan Mouse PC");
                 ui.horizontal(|ui| {
@@ -50,10 +52,10 @@ impl eframe::App for DS4App {
                         let new_running = !is_running;
                         self.is_local_running.store(new_running, Ordering::Relaxed);
                         if new_running {
-                            self.local_status = "Status: Aktif (Mengontrol Mouse)".to_string();
+                            self.local_status = "Status: Aktif (DirectInput)".to_string();
                             let r = self.is_local_running.clone();
                             let ctx_clone = ctx.clone();
-                            thread::spawn(move || run_local_gopher(r, ctx_clone));
+                            thread::spawn(move || run_local_directinput(r, ctx_clone));
                         } else {
                             self.local_status = "Status: Mati".to_string();
                         }
@@ -64,7 +66,6 @@ impl eframe::App for DS4App {
 
             ui.separator();
 
-            // --- TAB 2: ANDROID SERVER ---
             ui.group(|ui| {
                 ui.label("Android Server (Wi-Fi) -> Virtual Xbox Controller");
                 ui.horizontal(|ui| {
@@ -83,32 +84,19 @@ impl eframe::App for DS4App {
                     }
                     ui.label(&self.server_status);
                 });
-
                 ui.horizontal(|ui| {
-                    ui.label("IP PC (Masukkan ke Android):");
+                    ui.label("IP PC:");
                     ui.text_edit_singleline(&mut self.ip_address.clone());
                 });
-            });
-
-            ui.separator();
-
-            // --- TAB 3: CONFIG INFO ---
-            ui.group(|ui| {
-                ui.label("Config Editor:");
-                ui.label("Silakan buka file 'config-editor.html' di browser Anda.");
-                ui.label("Atur tombol sesuka hati, lalu simpan 'config.ini' di folder yang sama.");
             });
         });
     }
 }
 
-// =====================================================================
-//  ENTRY POINT
-// =====================================================================
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([600.0, 450.0]),
-        vsync: true, 
+        vsync: true,
         ..Default::default()
     };
     eframe::run_native(
@@ -119,12 +107,98 @@ fn main() -> Result<(), eframe::Error> {
 }
 
 // =====================================================================
-//  LOGIKA LOCAL GOPHER (gilrs)
+//  DIRECTINPUT SETUP
 // =====================================================================
-fn run_local_gopher(is_running: Arc<AtomicBool>, ctx: egui::Context) {
-    let mut gilrs = match Gilrs::new() {
-        Ok(g) => g,
-        Err(_) => return,
+struct DiContext {
+    found_guid: Option<GUID>,
+}
+
+unsafe extern "system" fn enum_callback(
+    pdidi: *const DIDEVICEINSTANCEW,
+    pvref: *mut c_void,
+) -> BOOL {
+    let ctx = &mut *(pvref as *mut DiContext);
+    let dev = &*pdidi;
+    ctx.found_guid = Some(dev.guidInstance);
+    FALSE // Stop enumeration setelah dapat device pertama
+}
+
+fn init_directinput() -> Option<(IDirectInput8W, IDirectInputDevice8W)> {
+    unsafe {
+        CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
+        let hinst = GetModuleHandleW(None).ok()?;
+        
+        let mut di_ptr: *mut c_void = std::ptr::null_mut();
+        DirectInput8Create(
+            HINSTANCE(hinst.0),
+            DIRECTINPUT_VERSION,
+            &IDirectInput8W::IID,
+            &mut di_ptr,
+            None,
+        ).ok()?;
+        
+        if di_ptr.is_null() { return None; }
+        let di: IDirectInput8W = IDirectInput8W::from_raw(di_ptr);
+        
+        let mut ctx = DiContext { found_guid: None };
+        di.EnumDevices(
+            DI8DEVCLASS_GAMECTRL,
+            Some(enum_callback),
+            &mut ctx as *mut _ as *mut c_void,
+            DIEDFL_ATTACHEDONLY,
+        ).ok()?;
+        
+        let guid = ctx.found_guid?;
+        let mut dev_ptr: *mut c_void = std::ptr::null_mut();
+        di.CreateDevice(&guid, &mut dev_ptr, None).ok()?;
+        
+        if dev_ptr.is_null() { return None; }
+        let device: IDirectInputDevice8W = IDirectInputDevice8W::from_raw(dev_ptr);
+        
+        device.SetDataFormat(&c_dfDIJoystick2).ok()?;
+        
+        // KUNCI UTAMA: DISCL_BACKGROUND agar bisa baca walau tidak fokus
+        device.SetCooperativeLevel(None, DISCL_BACKGROUND | DISCL_NONEXCLUSIVE).ok()?;
+        
+        // Set range agar konsisten -32768 s/d 32767
+        let mut range = DIPROPRANGE {
+            diph: DIPROPHEADER {
+                dwSize: std::mem::size_of::<DIPROPRANGE>() as u32,
+                dwHeaderSize: std::mem::size_of::<DIPROPHEADER>() as u32,
+                dwObj: DIJOFS_X as u32,
+                dwHow: DIPH_BYOFFSET,
+            },
+            lMin: -32768,
+            lMax: 32767,
+        };
+        let _ = device.SetProperty(DIPROP_RANGE, &mut range.diph);
+        range.diph.dwObj = DIJOFS_Y as u32;
+        let _ = device.SetProperty(DIPROP_RANGE, &mut range.diph);
+        range.diph.dwObj = DIJOFS_RX as u32;
+        let _ = device.SetProperty(DIPROP_RANGE, &mut range.diph);
+        range.diph.dwObj = DIJOFS_RY as u32;
+        let _ = device.SetProperty(DIPROP_RANGE, &mut range.diph);
+        
+        device.Acquire().ok()?;
+        
+        Some((di, device))
+    }
+}
+
+// =====================================================================
+//  LOCAL GOPHER (DirectInput - Anti Background Freeze)
+// =====================================================================
+fn run_local_directinput(is_running: Arc<AtomicBool>, ctx: egui::Context) {
+    let (_di, device) = match init_directinput() {
+        Some(d) => {
+            println!("[DEBUG] DirectInput berhasil diinisialisasi");
+            d
+        }
+        None => {
+            println!("[ERROR] Gagal inisialisasi DirectInput");
+            ctx.request_repaint();
+            return;
+        }
     };
 
     let mut last_click = false;
@@ -132,30 +206,34 @@ fn run_local_gopher(is_running: Arc<AtomicBool>, ctx: egui::Context) {
     let mut accum_y = 0.0;
 
     while is_running.load(Ordering::Relaxed) {
-        while let Some(_event) = gilrs.next_event() {}
-        
-        let mut gamepad = None;
-        for (_id, gp) in gilrs.gamepads() {
-            if gp.is_connected() {
-                gamepad = Some(gp);
-                break;
+        unsafe {
+            if device.Poll().is_err() {
+                let _ = device.Acquire();
+                thread::sleep(Duration::from_millis(100));
+                continue;
             }
-        }
-
-        if let Some(gp) = gamepad {
-            let lx = gp.value(Axis::LeftStickX);
-            let ly = gp.value(Axis::LeftStickY);
             
-            let deadzone = 0.15; 
+            let mut state = DIJOYSTATE2::default();
+            if device.GetDeviceState(
+                std::mem::size_of::<DIJOYSTATE2>() as u32,
+                &mut state as *mut _ as *mut c_void,
+            ).is_err() {
+                let _ = device.Acquire();
+                continue;
+            }
+
+            // Normalisasi analog (-32768..32767 ke -1.0..1.0)
+            let lx = (state.lX as f32) / 32767.0;
+            let ly = (state.lY as f32) / 32767.0;
+            
+            let deadzone = 0.15;
             if lx.abs() > deadzone || ly.abs() > deadzone {
                 accum_x += lx * 15.0;
                 accum_y += ly * 15.0;
-                
                 let dx = accum_x as i32;
                 let dy = accum_y as i32;
-                
                 if dx != 0 || dy != 0 {
-                    move_mouse(dx, dy);
+                    move_mouse_hybrid(dx, dy);
                     accum_x -= dx as f32;
                     accum_y -= dy as f32;
                 }
@@ -164,26 +242,25 @@ fn run_local_gopher(is_running: Arc<AtomicBool>, ctx: egui::Context) {
                 accum_y = 0.0;
             }
 
-            let current_click = gp.is_pressed(Button::South);
-            if current_click != last_click {
-                mouse_click(current_click);
-                last_click = current_click;
-            }
-        } else {
-            if last_click {
-                mouse_click(false);
-                last_click = false;
+            // Tombol 1 = Cross (klik kiri)
+            let cross_pressed = (state.rgbButtons[1] & 0x80) != 0;
+            if cross_pressed != last_click {
+                mouse_click(cross_pressed);
+                last_click = cross_pressed;
             }
         }
         
-        thread::sleep(Duration::from_millis(16));
+        thread::sleep(Duration::from_millis(20));
     }
     
+    unsafe {
+        let _ = device.Unacquire();
+    }
     ctx.request_repaint();
 }
 
 // =====================================================================
-//  LOGIKA ANDROID SERVER (TCP & ViGEmBus - LOW CPU FIX)
+//  ANDROID SERVER (Sama seperti sebelumnya)
 // =====================================================================
 fn run_android_server(is_running: Arc<AtomicBool>, ctx: egui::Context) {
     unsafe {
@@ -195,10 +272,7 @@ fn run_android_server(is_running: Arc<AtomicBool>, ctx: egui::Context) {
 
     let client = match Client::connect() {
         Ok(c) => c,
-        Err(_) => {
-            println!("ViGEmBus tidak terinstal!");
-            return;
-        }
+        Err(_) => { println!("ViGEmBus tidak terinstal!"); return; }
     };
     
     let id = TargetId::XBOX360_WIRED;
@@ -225,16 +299,14 @@ fn run_android_server(is_running: Arc<AtomicBool>, ctx: egui::Context) {
         match listener.accept() {
             Ok((mut stream, _)) => {
                 println!("Android Terhubung!");
-                ctx.request_repaint(); // Update UI saat HP tersambung
+                ctx.request_repaint();
                 
                 let _ = stream.set_nodelay(true);
-                // Set nonblocking false agar read_exact bisa menunggu dengan tidur (0% CPU)
-                let _ = stream.set_nonblocking(false); 
+                let _ = stream.set_nonblocking(false);
                 
                 let mut buf = [0u8; 12];
                 
                 while is_running.load(Ordering::Relaxed) {
-                    // Gunakan read_exact untuk mencegah spin loop akibat TCP fragmentasi
                     match stream.read_exact(&mut buf) {
                         Ok(()) => {
                             if buf[0] == 0xAA {
@@ -278,32 +350,24 @@ fn run_android_server(is_running: Arc<AtomicBool>, ctx: egui::Context) {
                                 let _ = target.update(&gamepad);
                             }
                         }
-                        Err(e) => {
-                            println!("Android memutus koneksi: {}", e);
-                            break;
-                        }
+                        Err(e) => { println!("Android memutus: {}", e); break; }
                     }
                 }
-                
-                ctx.request_repaint(); // Update UI saat HP terputus
+                ctx.request_repaint();
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 thread::sleep(Duration::from_millis(50));
             }
-            Err(e) => {
-                println!("Accept Error: {}", e);
-                break;
-            }
+            Err(e) => { println!("Accept Error: {}", e); break; }
         }
     }
-    
     ctx.request_repaint();
 }
 
 // =====================================================================
-//  UTILS: WINDOWS API (Mouse & IP)
+//  UTILS
 // =====================================================================
-fn move_mouse(dx: i32, dy: i32) {
+fn move_mouse_hybrid(dx: i32, dy: i32) {
     let input = INPUT {
         r#type: INPUT_MOUSE,
         Anonymous: INPUT_0 {
@@ -316,7 +380,16 @@ fn move_mouse(dx: i32, dy: i32) {
             },
         },
     };
-    unsafe { SendInput(&[input], std::mem::size_of::<INPUT>() as i32); }
+    let result = unsafe { SendInput(&[input], std::mem::size_of::<INPUT>() as i32) };
+    
+    if result == 0 {
+        unsafe {
+            let mut pos = POINT { x: 0, y: 0 };
+            if GetCursorPos(&mut pos).is_ok() {
+                let _ = SetCursorPos(pos.x + dx, pos.y + dy);
+            }
+        }
+    }
 }
 
 fn mouse_click(down: bool) {
@@ -326,8 +399,7 @@ fn mouse_click(down: bool) {
             mi: MOUSEINPUT {
                 dx: 0, dy: 0, mouseData: 0,
                 dwFlags: if down { MOUSEEVENTF_LEFTDOWN } else { MOUSEEVENTF_LEFTUP },
-                time: 0,
-                dwExtraInfo: 0,
+                time: 0, dwExtraInfo: 0,
             },
         },
     };
