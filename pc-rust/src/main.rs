@@ -9,7 +9,7 @@ use vigem_client::{Client, TargetId, Xbox360Wired, XGamepad, XButtons};
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 
 // =====================================================================
-//  STATE GLOBAL UNTUK UI (Menggunakan AtomicBool agar bebas crash)
+//  STATE GLOBAL UNTUK UI
 // =====================================================================
 struct DS4App {
     local_status: String,
@@ -154,7 +154,7 @@ fn run_local_gopher(is_running: Arc<AtomicBool>) {
 }
 
 // =====================================================================
-//  LOGIKA ANDROID SERVER (TCP & ViGEmBus)
+//  LOGIKA ANDROID SERVER (TCP & ViGEmBus - FULL FIX)
 // =====================================================================
 fn run_android_server(is_running: Arc<AtomicBool>) {
     let client = match Client::connect() {
@@ -178,7 +178,6 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
         Err(e) => { println!("Bind error: {}", e); return; },
     };
     
-    // Pastikan listener tidak memblokir thread utama
     if let Err(e) = listener.set_nonblocking(true) {
         println!("Set nonblocking error: {}", e);
         return;
@@ -191,7 +190,6 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
             Ok((mut stream, _)) => {
                 println!("Android Terhubung!");
                 
-                // Optimasi koneksi
                 let _ = stream.set_nodelay(true);
                 let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(100)));
                 
@@ -200,38 +198,59 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
                 while is_running.load(Ordering::Relaxed) {
                     match stream.read(&mut buf) {
                         Ok(0) => {
-                            println!("Android memutus koneksi (EOF).");
+                            println!("Android memutus koneksi.");
                             break;
                         }
                         Ok(bytes) if bytes == 12 && buf[0] == 0xAA => {
                             let buttons_mask = u16::from_le_bytes([buf[1], buf[2]]);
                             let mut raw_buttons = 0u16;
                             
-                            if (buttons_mask & 1) != 0 { raw_buttons |= XButtons::A; }
-                            if (buttons_mask & 2) != 0 { raw_buttons |= XButtons::B; }
-                            if (buttons_mask & 4) != 0 { raw_buttons |= XButtons::X; }
-                            if (buttons_mask & 8) != 0 { raw_buttons |= XButtons::Y; }
+                            // --- TOMBOL WAJAH (A, B, X, Y) ---
+                            if (buttons_mask & 1) != 0 { raw_buttons |= XButtons::A; }       // Cross
+                            if (buttons_mask & 2) != 0 { raw_buttons |= XButtons::B; }       // Circle
+                            if (buttons_mask & 4) != 0 { raw_buttons |= XButtons::X; }       // Square
+                            if (buttons_mask & 8) != 0 { raw_buttons |= XButtons::Y; }       // Triangle
+                            
+                            // --- BUMPER (L1, R1) ---
                             if (buttons_mask & 16) != 0 { raw_buttons |= XButtons::LB; }
                             if (buttons_mask & 32) != 0 { raw_buttons |= XButtons::RB; }
-                            
+
+                            // --- START & BACK (Options & Share) ---
+                            if (buttons_mask & 64) != 0 { raw_buttons |= XButtons::BACK; }   // Share
+                            if (buttons_mask & 128) != 0 { raw_buttons |= XButtons::START; } // Options
+
+                            // --- STICK CLICKS (L3, R3) ---
+                            if (buttons_mask & 256) != 0 { raw_buttons |= XButtons::LEFT_THUMB; }
+                            if (buttons_mask & 512) != 0 { raw_buttons |= XButtons::RIGHT_THUMB; }
+
+                            // --- D-PAD (buf[9]) ---
+                            let dpad = buf[9];
+                            if dpad == 0 || dpad == 1 || dpad == 7 { raw_buttons |= XButtons::UP; }
+                            if dpad == 2 || dpad == 1 || dpad == 3 { raw_buttons |= XButtons::RIGHT; }
+                            if dpad == 4 || dpad == 3 || dpad == 5 { raw_buttons |= XButtons::DOWN; }
+                            if dpad == 6 || dpad == 5 || dpad == 7 { raw_buttons |= XButtons::LEFT; }
+
                             let buttons = XButtons { raw: raw_buttons };
+                            
+                            // --- ANALOG & TRIGGER ---
+                            // Y dibalik (-) karena XInput standar menggunakan Y positif untuk Atas
                             let gamepad = XGamepad {
                                 buttons,
+                                left_trigger: buf[7],   // L2
+                                right_trigger: buf[8],  // R2
                                 thumb_lx: ((buf[3] as i16 - 128) * 256) as i16,
-                                thumb_ly: ((buf[4] as i16 - 128) * 256) as i16,
+                                thumb_ly: -(((buf[4] as i16 - 128) * 256) as i16), // INVERT Y
                                 thumb_rx: ((buf[5] as i16 - 128) * 256) as i16,
-                                thumb_ry: ((buf[6] as i16 - 128) * 256) as i16,
-                                ..Default::default()
+                                thumb_ry: -(((buf[6] as i16 - 128) * 256) as i16), // INVERT Y
                             };
                             
-                            // Cegah crash jika ViGEmBus error saat update
                             if let Err(e) = target.update(&gamepad) {
                                 println!("ViGEm Update Error: {:?}", e);
                             }
                         }
-                        Ok(_) => continue, // Abaikan paket aneh
+                        Ok(_) => continue,
                         Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
-                            continue; // Waktu habis (tidak ada data) itu normal
+                            continue;
                         }
                         Err(e) => {
                             println!("Read Error: {}", e);
