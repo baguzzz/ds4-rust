@@ -220,8 +220,9 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
                             if (buttons_mask & 128) != 0 { raw_buttons |= XButtons::START; } // Options
 
                             // --- STICK CLICKS (L3, R3) ---
-                            if (buttons_mask & 256) != 0 { raw_buttons |= XButtons::LEFT_THUMB; }
-                            if (buttons_mask & 512) != 0 { raw_buttons |= XButtons::RIGHT_THUMB; }
+                            // PERBAIKAN: Gunakan LTHUMB dan RTHUMB
+                            if (buttons_mask & 256) != 0 { raw_buttons |= XButtons::LTHUMB; }
+                            if (buttons_mask & 512) != 0 { raw_buttons |= XButtons::RTHUMB; }
 
                             // --- D-PAD (buf[9]) ---
                             let dpad = buf[9];
@@ -233,7 +234,6 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
                             let buttons = XButtons { raw: raw_buttons };
                             
                             // --- ANALOG & TRIGGER ---
-                            // Y dibalik (-) karena XInput standar menggunakan Y positif untuk Atas
                             let gamepad = XGamepad {
                                 buttons,
                                 left_trigger: buf[7],   // L2
