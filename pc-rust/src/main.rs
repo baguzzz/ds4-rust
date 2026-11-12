@@ -196,9 +196,9 @@ fn run_android_server(is_running: Arc<Mutex<bool>>) {
                             if (buttons_mask & 4) != 0 { raw_buttons |= XButtons::X; }
                             if (buttons_mask & 8) != 0 { raw_buttons |= XButtons::Y; }
                             
-                            // PERBAIKAN: Gunakan LEFT_SHOULDER dan RIGHT_SHOULDER
-                            if (buttons_mask & 16) != 0 { raw_buttons |= XButtons::LEFT_SHOULDER; }
-                            if (buttons_mask & 32) != 0 { raw_buttons |= XButtons::RIGHT_SHOULDER; }
+                            // Gunakan LB dan RB yang valid di vigem-client 0.1.4
+                            if (buttons_mask & 16) != 0 { raw_buttons |= XButtons::LB; }
+                            if (buttons_mask & 32) != 0 { raw_buttons |= XButtons::RB; }
 
                             let buttons = XButtons { raw: raw_buttons };
 
