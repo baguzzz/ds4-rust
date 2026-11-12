@@ -3,19 +3,20 @@ use gilrs::{Gilrs, Button, Axis};
 use std::net::TcpListener;
 use std::io::Read;
 use std::thread;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use vigem_client::{Client, TargetId, Xbox360Wired, XGamepad, XButtons};
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 
 // =====================================================================
-//  STATE GLOBAL UNTUK UI
+//  STATE GLOBAL UNTUK UI (Menggunakan AtomicBool agar bebas crash)
 // =====================================================================
 struct DS4App {
     local_status: String,
     server_status: String,
     ip_address: String,
-    is_local_running: Arc<Mutex<bool>>,
-    is_server_running: Arc<Mutex<bool>>,
+    is_local_running: Arc<AtomicBool>,
+    is_server_running: Arc<AtomicBool>,
 }
 
 impl Default for DS4App {
@@ -24,8 +25,8 @@ impl Default for DS4App {
             local_status: "Status: Mati".to_owned(),
             server_status: "Status: Mati".to_owned(),
             ip_address: get_local_ip(),
-            is_local_running: Arc::new(Mutex::new(false)),
-            is_server_running: Arc::new(Mutex::new(false)),
+            is_local_running: Arc::new(AtomicBool::new(false)),
+            is_server_running: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -43,10 +44,11 @@ impl eframe::App for DS4App {
             ui.group(|ui| {
                 ui.label("Local Controller (USB/BT)");
                 ui.horizontal(|ui| {
-                    if ui.button(if *self.is_local_running.lock().unwrap() { "Hentikan Gopher Lokal" } else { "Mulai Gopher Lokal" }).clicked() {
-                        let mut running = self.is_local_running.lock().unwrap();
-                        *running = !*running;
-                        if *running {
+                    let is_running = self.is_local_running.load(Ordering::Relaxed);
+                    if ui.button(if is_running { "Hentikan Gopher Lokal" } else { "Mulai Gopher Lokal" }).clicked() {
+                        let new_running = !is_running;
+                        self.is_local_running.store(new_running, Ordering::Relaxed);
+                        if new_running {
                             self.local_status = "Status: Aktif (Membaca USB)".to_string();
                             let r = self.is_local_running.clone();
                             thread::spawn(move || run_local_gopher(r));
@@ -64,10 +66,11 @@ impl eframe::App for DS4App {
             ui.group(|ui| {
                 ui.label("Android Server (Wi-Fi)");
                 ui.horizontal(|ui| {
-                    if ui.button(if *self.is_server_running.lock().unwrap() { "Hentikan Server TCP" } else { "Mulai Server TCP" }).clicked() {
-                        let mut running = self.is_server_running.lock().unwrap();
-                        *running = !*running;
-                        if *running {
+                    let is_running = self.is_server_running.load(Ordering::Relaxed);
+                    if ui.button(if is_running { "Hentikan Server TCP" } else { "Mulai Server TCP" }).clicked() {
+                        let new_running = !is_running;
+                        self.is_server_running.store(new_running, Ordering::Relaxed);
+                        if new_running {
                             self.server_status = "Status: Menunggu Android...".to_string();
                             let r = self.is_server_running.clone();
                             thread::spawn(move || run_android_server(r));
@@ -114,13 +117,13 @@ fn main() -> Result<(), eframe::Error> {
 // =====================================================================
 //  LOGIKA LOCAL GOPHER (gilrs)
 // =====================================================================
-fn run_local_gopher(is_running: Arc<Mutex<bool>>) {
+fn run_local_gopher(is_running: Arc<AtomicBool>) {
     let mut gilrs = match Gilrs::new() {
         Ok(g) => g,
         Err(_) => return,
     };
 
-    while *is_running.lock().unwrap() {
+    while is_running.load(Ordering::Relaxed) {
         while let Some(_event) = gilrs.next_event() {}
         
         let mut gamepad = None;
@@ -153,7 +156,7 @@ fn run_local_gopher(is_running: Arc<Mutex<bool>>) {
 // =====================================================================
 //  LOGIKA ANDROID SERVER (TCP & ViGEmBus)
 // =====================================================================
-fn run_android_server(is_running: Arc<Mutex<bool>>) {
+fn run_android_server(is_running: Arc<AtomicBool>) {
     let client = match Client::connect() {
         Ok(c) => c,
         Err(_) => {
@@ -172,36 +175,46 @@ fn run_android_server(is_running: Arc<Mutex<bool>>) {
 
     let listener = match TcpListener::bind("0.0.0.0:27020") {
         Ok(l) => l,
-        Err(_) => return,
+        Err(e) => { println!("Bind error: {}", e); return; },
     };
-    listener.set_nonblocking(true).unwrap();
+    
+    // Pastikan listener tidak memblokir thread utama
+    if let Err(e) = listener.set_nonblocking(true) {
+        println!("Set nonblocking error: {}", e);
+        return;
+    }
 
-    println!("Server TCP berjalan di port 27020...");
+    println!("Server TCP berjalan di port 27020. Menunggu HP...");
 
-    while *is_running.lock().unwrap() {
+    while is_running.load(Ordering::Relaxed) {
         match listener.accept() {
             Ok((mut stream, _)) => {
                 println!("Android Terhubung!");
+                
+                // Optimasi koneksi
+                let _ = stream.set_nodelay(true);
+                let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(100)));
+                
                 let mut buf = [0u8; 12];
                 
-                while *is_running.lock().unwrap() {
-                    if let Ok(bytes) = stream.read(&mut buf) {
-                        if bytes == 12 && buf[0] == 0xAA {
+                while is_running.load(Ordering::Relaxed) {
+                    match stream.read(&mut buf) {
+                        Ok(0) => {
+                            println!("Android memutus koneksi (EOF).");
+                            break;
+                        }
+                        Ok(bytes) if bytes == 12 && buf[0] == 0xAA => {
                             let buttons_mask = u16::from_le_bytes([buf[1], buf[2]]);
-                            
                             let mut raw_buttons = 0u16;
                             
                             if (buttons_mask & 1) != 0 { raw_buttons |= XButtons::A; }
                             if (buttons_mask & 2) != 0 { raw_buttons |= XButtons::B; }
                             if (buttons_mask & 4) != 0 { raw_buttons |= XButtons::X; }
                             if (buttons_mask & 8) != 0 { raw_buttons |= XButtons::Y; }
-                            
-                            // Gunakan LB dan RB yang valid di vigem-client 0.1.4
                             if (buttons_mask & 16) != 0 { raw_buttons |= XButtons::LB; }
                             if (buttons_mask & 32) != 0 { raw_buttons |= XButtons::RB; }
-
+                            
                             let buttons = XButtons { raw: raw_buttons };
-
                             let gamepad = XGamepad {
                                 buttons,
                                 thumb_lx: ((buf[3] as i16 - 128) * 256) as i16,
@@ -211,17 +224,29 @@ fn run_android_server(is_running: Arc<Mutex<bool>>) {
                                 ..Default::default()
                             };
                             
-                            let _ = target.update(&gamepad);
+                            // Cegah crash jika ViGEmBus error saat update
+                            if let Err(e) = target.update(&gamepad) {
+                                println!("ViGEm Update Error: {:?}", e);
+                            }
                         }
-                    } else {
-                        break;
+                        Ok(_) => continue, // Abaikan paket aneh
+                        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
+                            continue; // Waktu habis (tidak ada data) itu normal
+                        }
+                        Err(e) => {
+                            println!("Read Error: {}", e);
+                            break;
+                        }
                     }
                 }
             }
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                thread::sleep(std::time::Duration::from_millis(100));
+                thread::sleep(std::time::Duration::from_millis(50));
             }
-            Err(_) => break,
+            Err(e) => {
+                println!("Accept Error: {}", e);
+                break;
+            }
         }
     }
 }
