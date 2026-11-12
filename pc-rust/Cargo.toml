@@ -4,13 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# Untuk UI Native (Bebas error WebView)
 eframe = "0.27.2" 
-# Untuk deteksi controller (USB/Bluetooth)
 gilrs = "0.10.6" 
-# Untuk Virtual Controller (ViGEmBus)
-vigem-client = "0.3.2" 
-# Untuk komunikasi Wi-Fi (TCP)
+# PERBAIKAN: Gunakan versi yang tersedia di crates.io
+vigem-client = "0.1.4" 
 tokio = { version = "1.36", features = ["full"] }
-# Untuk kontrol Mouse/Keyboard Windows
 windows = { version = "0.53.0", features = ["Win32_UI_Input_KeyboardAndMouse"] }

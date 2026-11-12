@@ -4,7 +4,7 @@ use std::net::TcpListener;
 use std::io::Read;
 use std::thread;
 use std::sync::{Arc, Mutex};
-use vigem_client::{Client, TargetId, X360Controller};
+use vigem_client::{Client, TargetId, DualShock4Wired, DS4Report};
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 
 // State global untuk UI
@@ -132,10 +132,14 @@ fn run_local_gopher(is_running: Arc<Mutex<bool>>) {
 
 // ================= LOGIKA ANDROID SERVER =================
 fn run_android_server(is_running: Arc<Mutex<bool>>) {
+    // Koneksi ke ViGEmBus
     let client = Client::connect().expect("ViGEmBus tidak terinstal!");
-    let mut target = client.create_target(TargetId::DualShock4).unwrap();
-    let _ = target.connect();
     
+    // Membuat target DualShock 4
+    let mut target = DualShock4Wired::new(client, TargetId::DUALSHOCK4);
+    target.plugin().expect("Gagal memasang virtual controller");
+    target.wait_ready().expect("Virtual controller belum siap");
+
     let listener = TcpListener::bind("0.0.0.0:27020").expect("Gagal bind port");
     listener.set_nonblocking(true).unwrap();
 
@@ -152,19 +156,19 @@ fn run_android_server(is_running: Arc<Mutex<bool>>) {
                         if bytes == 12 && buf[0] == 0xAA {
                             let buttons = u16::from_le_bytes([buf[1], buf[2]]);
                             
-                            // Update Virtual DS4
-                            target.set_button(0x20, (buttons & 1) != 0); // Cross
-                            target.set_button(0x40, (buttons & 2) != 0); // Circle
-                            target.set_button(0x10, (buttons & 4) != 0); // Square
-                            target.set_button(0x80, (buttons & 8) != 0); // Triangle
+                            // Buat report DS4
+                            let mut report = DS4Report::default();
                             
-                            // Analog
-                            target.set_axis(0, buf[3]); // LX
-                            target.set_axis(1, buf[4]); // LY
-                            target.set_axis(2, buf[5]); // RX
-                            target.set_axis(3, buf[6]); // RY
+                            // Set tombol (sesuaikan bitmask dengan DS4Report)
+                            report.buttons = buttons;
                             
-                            let _ = target.update();
+                            // Set analog
+                            report.thumb_lx = (buf[3] as i16 - 128) * 256;
+                            report.thumb_ly = (buf[4] as i16 - 128) * 256;
+                            report.thumb_rx = (buf[5] as i16 - 128) * 256;
+                            report.thumb_ry = (buf[6] as i16 - 128) * 256;
+                            
+                            let _ = target.update(&report);
                         }
                     } else {
                         break; // Disconnect
