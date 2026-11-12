@@ -205,25 +205,25 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
                             let buttons_mask = u16::from_le_bytes([buf[1], buf[2]]);
                             let mut raw_buttons = 0u16;
                             
-                            // --- TOMBOL WAJAH (A, B, X, Y) ---
-                            if (buttons_mask & 1) != 0 { raw_buttons |= XButtons::A; }       // Cross
-                            if (buttons_mask & 2) != 0 { raw_buttons |= XButtons::B; }       // Circle
-                            if (buttons_mask & 4) != 0 { raw_buttons |= XButtons::X; }       // Square
-                            if (buttons_mask & 8) != 0 { raw_buttons |= XButtons::Y; }       // Triangle
+                            // --- TOMBOL WAJAH ---
+                            if (buttons_mask & 1) != 0 { raw_buttons |= XButtons::A; }
+                            if (buttons_mask & 2) != 0 { raw_buttons |= XButtons::B; }
+                            if (buttons_mask & 4) != 0 { raw_buttons |= XButtons::X; }
+                            if (buttons_mask & 8) != 0 { raw_buttons |= XButtons::Y; }
                             
-                            // --- BUMPER (L1, R1) ---
+                            // --- BUMPER ---
                             if (buttons_mask & 16) != 0 { raw_buttons |= XButtons::LB; }
                             if (buttons_mask & 32) != 0 { raw_buttons |= XButtons::RB; }
 
-                            // --- START & BACK (Options & Share) ---
-                            if (buttons_mask & 64) != 0 { raw_buttons |= XButtons::BACK; }   // Share
-                            if (buttons_mask & 128) != 0 { raw_buttons |= XButtons::START; } // Options
+                            // --- START & BACK ---
+                            if (buttons_mask & 64) != 0 { raw_buttons |= XButtons::BACK; }
+                            if (buttons_mask & 128) != 0 { raw_buttons |= XButtons::START; }
 
-                            // --- STICK CLICKS (L3, R3) ---
+                            // --- STICK CLICKS ---
                             if (buttons_mask & 256) != 0 { raw_buttons |= XButtons::LTHUMB; }
                             if (buttons_mask & 512) != 0 { raw_buttons |= XButtons::RTHUMB; }
 
-                            // --- D-PAD (buf[9]) ---
+                            // --- D-PAD ---
                             let dpad = buf[9];
                             if dpad == 0 || dpad == 1 || dpad == 7 { raw_buttons |= XButtons::UP; }
                             if dpad == 2 || dpad == 1 || dpad == 3 { raw_buttons |= XButtons::RIGHT; }
@@ -232,24 +232,26 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
 
                             let buttons = XButtons { raw: raw_buttons };
                             
-                            // --- ANALOG & TRIGGER ---
+                            // ====================================================
+                            // PERBAIKAN FINAL ANALOG (Menggunakan i32 & clamp)
+                            // ====================================================
+                            let lx_i32 = (buf[3] as i32 - 128) * 256;
+                            let rx_i32 = (buf[5] as i32 - 128) * 256;
+                            
+                            // Y dibalik (128 - nilai) karena XInput positif = Atas
+                            let ly_i32 = (128 - buf[4] as i32) * 256;
+                            let ry_i32 = (128 - buf[6] as i32) * 256;
+
                             let gamepad = XGamepad {
                                 buttons,
                                 left_trigger: buf[7],   // L2
                                 right_trigger: buf[8],  // R2
-                                thumb_lx: ((buf[3] as i16 - 128) * 256) as i16,
-                                thumb_ly: -(((buf[4] as i16 - 128) * 256) as i16),  // DIHAPUS MINUSNYA
-                                thumb_rx: ((buf[5] as i16 - 128) * 256) as i16,
-                                thumb_ry: -(((buf[6] as i16 - 128) * 256) as i16),  // DIHAPUS MINUSNYA
+                                thumb_lx: lx_i32.clamp(-32768, 32767) as i16,
+                                thumb_ly: ly_i32.clamp(-32768, 32767) as i16,
+                                thumb_rx: rx_i32.clamp(-32768, 32767) as i16,
+                                thumb_ry: ry_i32.clamp(-32768, 32767) as i16,
                             };
                             
-                            // [DEBUG] Cetak data untuk melihat apakah Android mengirim data dengan benar
-                            // Jika L2, R2, dpad bernilai 0 terus, berarti APK Android Anda versi lama.
-                            if (buttons_mask != 0) || (dpad != 8) || (buf[7] != 0) || (buf[8] != 0) {
-                                println!("Data -> Btn: {:#06X} | L2: {} | R2: {} | DPad: {} | X:{} Y:{}", 
-                                    buttons_mask, buf[7], buf[8], dpad, buf[3], buf[4]);
-                            }
-
                             if let Err(e) = target.update(&gamepad) {
                                 println!("ViGEm Update Error: {:?}", e);
                             }
@@ -302,7 +304,8 @@ fn mouse_click(down: bool) {
             mi: MOUSEINPUT {
                 dx: 0, dy: 0, mouseData: 0,
                 dwFlags: if down { MOUSEEVENTF_LEFTDOWN } else { MOUSEEVENTF_LEFTUP },
-                time: 0, dwExtraInfo: 0,
+                time: 0,
+                dwExtraInfo: 0,
             },
         },
     };
