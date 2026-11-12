@@ -220,7 +220,6 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
                             if (buttons_mask & 128) != 0 { raw_buttons |= XButtons::START; } // Options
 
                             // --- STICK CLICKS (L3, R3) ---
-                            // PERBAIKAN: Gunakan LTHUMB dan RTHUMB
                             if (buttons_mask & 256) != 0 { raw_buttons |= XButtons::LTHUMB; }
                             if (buttons_mask & 512) != 0 { raw_buttons |= XButtons::RTHUMB; }
 
@@ -239,11 +238,18 @@ fn run_android_server(is_running: Arc<AtomicBool>) {
                                 left_trigger: buf[7],   // L2
                                 right_trigger: buf[8],  // R2
                                 thumb_lx: ((buf[3] as i16 - 128) * 256) as i16,
-                                thumb_ly: -(((buf[4] as i16 - 128) * 256) as i16), // INVERT Y
+                                thumb_ly: ((buf[4] as i16 - 128) * 256) as i16,  // DIHAPUS MINUSNYA
                                 thumb_rx: ((buf[5] as i16 - 128) * 256) as i16,
-                                thumb_ry: -(((buf[6] as i16 - 128) * 256) as i16), // INVERT Y
+                                thumb_ry: ((buf[6] as i16 - 128) * 256) as i16,  // DIHAPUS MINUSNYA
                             };
                             
+                            // [DEBUG] Cetak data untuk melihat apakah Android mengirim data dengan benar
+                            // Jika L2, R2, dpad bernilai 0 terus, berarti APK Android Anda versi lama.
+                            if (buttons_mask != 0) || (dpad != 8) || (buf[7] != 0) || (buf[8] != 0) {
+                                println!("Data -> Btn: {:#06X} | L2: {} | R2: {} | DPad: {} | X:{} Y:{}", 
+                                    buttons_mask, buf[7], buf[8], dpad, buf[3], buf[4]);
+                            }
+
                             if let Err(e) = target.update(&gamepad) {
                                 println!("ViGEm Update Error: {:?}", e);
                             }
