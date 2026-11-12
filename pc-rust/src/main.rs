@@ -4,7 +4,7 @@ use std::net::TcpListener;
 use std::io::Read;
 use std::thread;
 use std::sync::{Arc, Mutex};
-use vigem_client::{Client, TargetId, DualShock4Wired, DS4Report};
+use vigem_client::{Client, TargetId, Xbox360Wired, XGamepad, XButtons};
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 
 // State global untuk UI
@@ -110,7 +110,6 @@ fn run_local_gopher(is_running: Arc<Mutex<bool>>) {
         }
 
         if let Some(gp) = gamepad {
-            // Baca Analog Kiri (Mouse)
             let lx = gp.value(Axis::LeftStickX);
             let ly = gp.value(Axis::LeftStickY);
             
@@ -118,7 +117,6 @@ fn run_local_gopher(is_running: Arc<Mutex<bool>>) {
                 move_mouse((lx * 15.0) as i32, (ly * 15.0) as i32);
             }
 
-            // Baca Tombol Cross (Biasanya South / A)
             if gp.is_pressed(Button::South) {
                 mouse_click(true);
             } else {
@@ -132,11 +130,12 @@ fn run_local_gopher(is_running: Arc<Mutex<bool>>) {
 
 // ================= LOGIKA ANDROID SERVER =================
 fn run_android_server(is_running: Arc<Mutex<bool>>) {
-    // Koneksi ke ViGEmBus
     let client = Client::connect().expect("ViGEmBus tidak terinstal!");
     
-    // Membuat target DualShock 4
-    let mut target = DualShock4Wired::new(client, TargetId::DUALSHOCK4);
+    // Beralih ke Xbox360Wired yang jauh lebih stabil
+    let id = TargetId::XBOX360_WIRED;
+    let mut target = Xbox360Wired::new(client, id);
+    
     target.plugin().expect("Gagal memasang virtual controller");
     target.wait_ready().expect("Virtual controller belum siap");
 
@@ -154,21 +153,27 @@ fn run_android_server(is_running: Arc<Mutex<bool>>) {
                 while *is_running.lock().unwrap() {
                     if let Ok(bytes) = stream.read(&mut buf) {
                         if bytes == 12 && buf[0] == 0xAA {
-                            let buttons = u16::from_le_bytes([buf[1], buf[2]]);
+                            let buttons_mask = u16::from_le_bytes([buf[1], buf[2]]);
                             
-                            // Buat report DS4
-                            let mut report = DS4Report::default();
+                            // Konversi bitmask dari Android ke XGamepad
+                            let mut buttons = XButtons::default();
+                            if (buttons_mask & 1) != 0 { buttons = buttons | XButtons::A; }
+                            if (buttons_mask & 2) != 0 { buttons = buttons | XButtons::B; }
+                            if (buttons_mask & 4) != 0 { buttons = buttons | XButtons::X; }
+                            if (buttons_mask & 8) != 0 { buttons = buttons | XButtons::Y; }
+                            if (buttons_mask & 16) != 0 { buttons = buttons | XButtons::LB; }
+                            if (buttons_mask & 32) != 0 { buttons = buttons | XButtons::RB; }
+
+                            let gamepad = XGamepad {
+                                buttons,
+                                thumb_lx: ((buf[3] as i16 - 128) * 256) as i16,
+                                thumb_ly: ((buf[4] as i16 - 128) * 256) as i16,
+                                thumb_rx: ((buf[5] as i16 - 128) * 256) as i16,
+                                thumb_ry: ((buf[6] as i16 - 128) * 256) as i16,
+                                ..Default::default()
+                            };
                             
-                            // Set tombol (sesuaikan bitmask dengan DS4Report)
-                            report.buttons = buttons;
-                            
-                            // Set analog
-                            report.thumb_lx = (buf[3] as i16 - 128) * 256;
-                            report.thumb_ly = (buf[4] as i16 - 128) * 256;
-                            report.thumb_rx = (buf[5] as i16 - 128) * 256;
-                            report.thumb_ry = (buf[6] as i16 - 128) * 256;
-                            
-                            let _ = target.update(&report);
+                            let _ = target.update(&gamepad);
                         }
                     } else {
                         break; // Disconnect
