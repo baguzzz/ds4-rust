@@ -11,7 +11,7 @@ windows = { version = "0.53.0", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_Com",
     "Win32_System_LibraryLoader",
-    "Win32_Devices_DirectInput",
+    "Win32_Devices_HumanInterfaceDevice",  # <-- Fitur yang benar
     "Win32_Foundation"
 ] }
 

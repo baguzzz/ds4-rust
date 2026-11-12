@@ -6,10 +6,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use std::ffi::c_void;
+use std::ptr;
 use vigem_client::{Client, TargetId, Xbox360Wired, XGamepad, XButtons};
-use windows::core::{Interface, GUID};
-use windows::Win32::Devices::DirectInput::*;
-use windows::Win32::Foundation::{BOOL, FALSE, HINSTANCE, POINT};
+use windows::core::Interface;
+use windows::Win32::Devices::HumanInterfaceDevice::{
+    DirectInput8Create, IDirectInput8W, IDirectInputDevice8W, DI8DEVCLASS_GAMECTRL,
+    DIDEVICEINSTANCEW, DIEDFL_ATTACHEDONLY, DIRECTINPUT_VERSION, DIJOYSTATE2,
+    DIPROPRANGE, DIPROPHEADER, DIPH_BYOFFSET, DIJOFS_X, DIJOFS_Y, DIJOFS_RX, DIJOFS_RY,
+    DISCL_BACKGROUND, DISCL_NONEXCLUSIVE, c_dfDIJoystick2
+};
+use windows::Win32::Foundation::{BOOL, FALSE, HINSTANCE, HWND, POINT};
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
@@ -38,6 +44,9 @@ impl Default for DS4App {
     }
 }
 
+// =====================================================================
+//  IMPLEMENTASI UI (EGUI)
+// =====================================================================
 impl eframe::App for DS4App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -107,10 +116,10 @@ fn main() -> Result<(), eframe::Error> {
 }
 
 // =====================================================================
-//  DIRECTINPUT SETUP
+//  DIRECTINPUT SETUP (Diperbaiki)
 // =====================================================================
 struct DiContext {
-    found_guid: Option<GUID>,
+    found_guid: Option<windows::core::GUID>,
 }
 
 unsafe extern "system" fn enum_callback(
@@ -126,11 +135,11 @@ unsafe extern "system" fn enum_callback(
 fn init_directinput() -> Option<(IDirectInput8W, IDirectInputDevice8W)> {
     unsafe {
         CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
-        let hinst = GetModuleHandleW(None).ok()?;
+        let hinst: HINSTANCE = GetModuleHandleW(None).ok()?.into();
         
-        let mut di_ptr: *mut c_void = std::ptr::null_mut();
+        let mut di_ptr: *mut c_void = ptr::null_mut();
         DirectInput8Create(
-            HINSTANCE(hinst.0),
+            hinst,
             DIRECTINPUT_VERSION,
             &IDirectInput8W::IID,
             &mut di_ptr,
@@ -138,7 +147,7 @@ fn init_directinput() -> Option<(IDirectInput8W, IDirectInputDevice8W)> {
         ).ok()?;
         
         if di_ptr.is_null() { return None; }
-        let di: IDirectInput8W = IDirectInput8W::from_raw(di_ptr);
+        let di = IDirectInput8W::from_raw(di_ptr);
         
         let mut ctx = DiContext { found_guid: None };
         di.EnumDevices(
@@ -149,7 +158,7 @@ fn init_directinput() -> Option<(IDirectInput8W, IDirectInputDevice8W)> {
         ).ok()?;
         
         let guid = ctx.found_guid?;
-        let mut dev_ptr: *mut c_void = std::ptr::null_mut();
+        let mut dev_ptr: *mut c_void = ptr::null_mut();
         di.CreateDevice(&guid, &mut dev_ptr, None).ok()?;
         
         if dev_ptr.is_null() { return None; }
@@ -158,7 +167,7 @@ fn init_directinput() -> Option<(IDirectInput8W, IDirectInputDevice8W)> {
         device.SetDataFormat(&c_dfDIJoystick2).ok()?;
         
         // KUNCI UTAMA: DISCL_BACKGROUND agar bisa baca walau tidak fokus
-        device.SetCooperativeLevel(None, DISCL_BACKGROUND | DISCL_NONEXCLUSIVE).ok()?;
+        device.SetCooperativeLevel(HWND(0), DISCL_BACKGROUND | DISCL_NONEXCLUSIVE).ok()?;
         
         // Set range agar konsisten -32768 s/d 32767
         let mut range = DIPROPRANGE {
