@@ -117,11 +117,10 @@ fn main() -> Result<(), eframe::Error> {
 fn run_local_gopher(is_running: Arc<Mutex<bool>>) {
     let mut gilrs = match Gilrs::new() {
         Ok(g) => g,
-        Err(_) => return, // Gagal inisialisasi gamepad
+        Err(_) => return,
     };
 
     while *is_running.lock().unwrap() {
-        // Baca event untuk update state
         while let Some(_event) = gilrs.next_event() {}
         
         let mut gamepad = None;
@@ -133,7 +132,6 @@ fn run_local_gopher(is_running: Arc<Mutex<bool>>) {
         }
 
         if let Some(gp) = gamepad {
-            // Baca Analog Kiri (Mouse)
             let lx = gp.value(Axis::LeftStickX);
             let ly = gp.value(Axis::LeftStickY);
             
@@ -141,7 +139,6 @@ fn run_local_gopher(is_running: Arc<Mutex<bool>>) {
                 move_mouse((lx * 15.0) as i32, (ly * 15.0) as i32);
             }
 
-            // Baca Tombol Cross (Biasanya South / A)
             if gp.is_pressed(Button::South) {
                 mouse_click(true);
             } else {
@@ -192,7 +189,6 @@ fn run_android_server(is_running: Arc<Mutex<bool>>) {
                         if bytes == 12 && buf[0] == 0xAA {
                             let buttons_mask = u16::from_le_bytes([buf[1], buf[2]]);
                             
-                            // Rakit tombol dalam variabel u16 terlebih dahulu
                             let mut raw_buttons = 0u16;
                             
                             if (buttons_mask & 1) != 0 { raw_buttons |= XButtons::A; }
@@ -200,14 +196,12 @@ fn run_android_server(is_running: Arc<Mutex<bool>>) {
                             if (buttons_mask & 4) != 0 { raw_buttons |= XButtons::X; }
                             if (buttons_mask & 8) != 0 { raw_buttons |= XButtons::Y; }
                             
-                            // L1 dan R1 di Xbox360 bernama ShoulderLeft & ShoulderRight
-                            if (buttons_mask & 16) != 0 { raw_buttons |= XButtons::ShoulderLeft; }
-                            if (buttons_mask & 32) != 0 { raw_buttons |= XButtons::ShoulderRight; }
+                            // PERBAIKAN: Gunakan LEFT_SHOULDER dan RIGHT_SHOULDER
+                            if (buttons_mask & 16) != 0 { raw_buttons |= XButtons::LEFT_SHOULDER; }
+                            if (buttons_mask & 32) != 0 { raw_buttons |= XButtons::RIGHT_SHOULDER; }
 
-                            // Bungkus ke dalam struct XButtons
                             let buttons = XButtons { raw: raw_buttons };
 
-                            // Buat state gamepad
                             let gamepad = XGamepad {
                                 buttons,
                                 thumb_lx: ((buf[3] as i16 - 128) * 256) as i16,
@@ -220,7 +214,7 @@ fn run_android_server(is_running: Arc<Mutex<bool>>) {
                             let _ = target.update(&gamepad);
                         }
                     } else {
-                        break; // Disconnect
+                        break;
                     }
                 }
             }
