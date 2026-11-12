@@ -1,0 +1,39 @@
+name: Build Rust PC App
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'pc-rust/**'
+      - '.github/workflows/build-rust.yml'
+  workflow_dispatch:
+
+jobs:
+  build-rust:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      # Fitur Cache agar build berikutnya jauh lebih cepat
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "pc-rust -> target"
+
+      - name: Build Rust Executable
+        working-directory: pc-rust
+        run: cargo build --release
+
+      - name: Upload Executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: DS4-Rust-win-x64
+          path: pc-rust/target/release/ds4-rust.exe
+          retention-days: 30
