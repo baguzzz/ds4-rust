@@ -21,7 +21,7 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
-      # Fitur Cache agar build berikutnya jauh lebih cepat
+      # Cache agar build berikutnya lebih cepat
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
