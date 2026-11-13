@@ -17,7 +17,6 @@ pub fn move_mouse_hybrid(dx: i32, dy: i32) {
     };
     let result = unsafe { SendInput(&[input], std::mem::size_of::<INPUT>() as i32) };
     
-    // Fallback ke SetCursorPos jika SendInput gagal (misal karena UIPI)
     if result == 0 {
         unsafe {
             let mut pos = POINT { x: 0, y: 0 };
@@ -41,4 +40,16 @@ pub fn mouse_click(down: bool) {
         },
     };
     unsafe { SendInput(&[input], std::mem::size_of::<INPUT>() as i32); }
+}
+
+pub fn get_local_ip() -> String {
+    use std::net::UdpSocket;
+    let socket = match UdpSocket::bind("0.0.0.0:0") {
+        Ok(s) => s,
+        Err(_) => return "127.0.0.1".to_string(),
+    };
+    if socket.connect("8.8.8.8:80").is_err() {
+        return "127.0.0.1".to_string();
+    }
+    socket.local_addr().map(|a| a.ip().to_string()).unwrap_or_else(|_| "127.0.0.1".to_string())
 }

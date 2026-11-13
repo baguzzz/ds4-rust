@@ -1,4 +1,4 @@
-use rusty_xinput::*;
+use rusty_xinput::{dynamic_load_xinput, xinput_get_state};
 use std::thread;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -6,23 +6,34 @@ use std::time::Duration;
 use crate::input_utils;
 
 pub fn run_xinput_gopher(is_running: Arc<AtomicBool>) {
-    // 1. Muat DLL XInput secara dinamis
+    // Muat XInput DLL secara dinamis
     if dynamic_load_xinput().is_err() {
-        println!("[ERROR] Gagal memuat XInput DLL. Pastikan driver XInput terinstal (misal: DS4Windows).");
+        println!("[ERROR] Gagal memuat XInput DLL. Pastikan DS4Windows atau driver XInput terinstal.");
         return;
     }
+
+    println!("[DEBUG] XInput berhasil dimuat. Menunggu controller...");
 
     let mut last_click = false;
     let mut accum_x = 0.0;
     let mut accum_y = 0.0;
+    let mut debug_counter = 0;
 
     while is_running.load(Ordering::Relaxed) {
-        // 2. Baca state dari controller slot 0
         match xinput_get_state(0) {
             Ok(state) => {
-                // Normalisasi analog (XInput: -32768..32767)
-                let lx = (state.raw.sThumbLX as f32) / 32767.0;
-                let ly = (state.raw.sThumbLY as f32) / 32767.0;
+                // PERBAIKAN: Akses lewat .Gamepad
+                let lx = (state.raw.Gamepad.sThumbLX as f32) / 32767.0;
+                let ly = (state.raw.Gamepad.sThumbLY as f32) / 32767.0;
+
+                // Debug log setiap ~1 detik
+                debug_counter += 1;
+                if debug_counter >= 50 {
+                    if lx.abs() > 0.1 || ly.abs() > 0.1 {
+                        println!("[DEBUG] Stick: X={:.2} Y={:.2}", lx, ly);
+                    }
+                    debug_counter = 0;
+                }
 
                 let deadzone = 0.15;
                 if lx.abs() > deadzone || ly.abs() > deadzone {
@@ -40,19 +51,22 @@ pub fn run_xinput_gopher(is_running: Arc<AtomicBool>) {
                     accum_y = 0.0;
                 }
 
-                // Cek tombol A (Cross)
-                let current_click = (state.raw.wButtons & 0x1000) != 0;
+                // PERBAIKAN: Akses lewat .Gamepad
+                let current_click = (state.raw.Gamepad.wButtons & 0x1000) != 0;
                 if current_click != last_click {
                     input_utils::mouse_click(current_click);
                     last_click = current_click;
                 }
             }
             Err(_) => {
-                // Controller tidak terdeteksi, tidur sebentar
-                thread::sleep(Duration::from_millis(100));
+                // Controller tidak terdeteksi
+                if last_click {
+                    input_utils::mouse_click(false);
+                    last_click = false;
+                }
+                thread::sleep(Duration::from_millis(200));
             }
         }
-        
         thread::sleep(Duration::from_millis(20));
     }
 }

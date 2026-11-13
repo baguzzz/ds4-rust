@@ -20,7 +20,8 @@ impl Default for DS4App {
         Self {
             local_status: "Status: Mati".to_owned(),
             server_status: "Status: Mati".to_owned(),
-            ip_address: "127.0.0.1".to_string(),
+            // PERBAIKAN: Panggil fungsi get_local_ip dari modul input_utils
+            ip_address: input_utils::get_local_ip(),
             is_local_running: Arc::new(AtomicBool::new(false)),
             is_server_running: Arc::new(AtomicBool::new(false)),
         }
@@ -33,7 +34,6 @@ impl eframe::App for DS4App {
             ui.heading("DS4 Unified - Rust Edition (Modular)");
             ui.separator();
 
-            // --- TAB 1: LOCAL CONTROLLER (XInput) ---
             ui.group(|ui| {
                 ui.label("Local Controller (XInput) -> Menggerakkan Mouse PC");
                 ui.horizontal(|ui| {
@@ -55,7 +55,6 @@ impl eframe::App for DS4App {
 
             ui.separator();
 
-            // --- TAB 2: ANDROID SERVER ---
             ui.group(|ui| {
                 ui.label("Android Server (Wi-Fi) -> Virtual Xbox Controller");
                 ui.horizontal(|ui| {
