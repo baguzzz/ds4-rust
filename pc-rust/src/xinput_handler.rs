@@ -1,4 +1,4 @@
-use rusty_xinput::{dynamic_load_xinput, xinput_get_state};
+use rusty_xinput::XInputHandle;
 use std::thread;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -6,11 +6,13 @@ use std::time::Duration;
 use crate::input_utils;
 
 pub fn run_xinput_gopher(is_running: Arc<AtomicBool>) {
-    // Muat XInput DLL secara dinamis
-    if dynamic_load_xinput().is_err() {
-        println!("[ERROR] Gagal memuat XInput DLL. Pastikan DS4Windows atau driver XInput terinstal.");
-        return;
-    }
+    let handle = match XInputHandle::load_default() {
+        Ok(h) => h,
+        Err(_) => {
+            println!("[ERROR] Gagal memuat XInput DLL. Pastikan DS4Windows atau driver XInput terinstal.");
+            return;
+        }
+    };
 
     println!("[DEBUG] XInput berhasil dimuat. Menunggu controller...");
 
@@ -20,13 +22,11 @@ pub fn run_xinput_gopher(is_running: Arc<AtomicBool>) {
     let mut debug_counter = 0;
 
     while is_running.load(Ordering::Relaxed) {
-        match xinput_get_state(0) {
+        match handle.get_state(0) {
             Ok(state) => {
-                // PERBAIKAN: Akses lewat .Gamepad
                 let lx = (state.raw.Gamepad.sThumbLX as f32) / 32767.0;
                 let ly = (state.raw.Gamepad.sThumbLY as f32) / 32767.0;
 
-                // Debug log setiap ~1 detik
                 debug_counter += 1;
                 if debug_counter >= 50 {
                     if lx.abs() > 0.1 || ly.abs() > 0.1 {
@@ -38,7 +38,10 @@ pub fn run_xinput_gopher(is_running: Arc<AtomicBool>) {
                 let deadzone = 0.15;
                 if lx.abs() > deadzone || ly.abs() > deadzone {
                     accum_x += lx * 15.0;
-                    accum_y += ly * 15.0;
+                    // PERBAIKAN: Tambahkan tanda minus di depan ly
+                    // karena Y positif di XInput = Atas, tapi Y positif di Mouse = Bawah
+                    accum_y += -ly * 15.0;
+                    
                     let dx = accum_x as i32;
                     let dy = accum_y as i32;
                     if dx != 0 || dy != 0 {
@@ -51,7 +54,6 @@ pub fn run_xinput_gopher(is_running: Arc<AtomicBool>) {
                     accum_y = 0.0;
                 }
 
-                // PERBAIKAN: Akses lewat .Gamepad
                 let current_click = (state.raw.Gamepad.wButtons & 0x1000) != 0;
                 if current_click != last_click {
                     input_utils::mouse_click(current_click);
@@ -59,7 +61,6 @@ pub fn run_xinput_gopher(is_running: Arc<AtomicBool>) {
                 }
             }
             Err(_) => {
-                // Controller tidak terdeteksi
                 if last_click {
                     input_utils::mouse_click(false);
                     last_click = false;
