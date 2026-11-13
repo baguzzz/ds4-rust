@@ -3,69 +3,154 @@ use std::thread;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use std::collections::HashMap;
+use std::fs;
 use crate::input_utils;
+
+// Struct untuk menyimpan aksi dari config.ini
+struct Action {
+    vk: u16,
+    is_mouse_left: bool,
+    is_mouse_right: bool,
+}
+
+// Menerjemahkan string dari config.ini menjadi aksi
+fn parse_key(val: &str) -> Action {
+    if val == "MouseLeft" { return Action { vk: 0, is_mouse_left: true, is_mouse_right: false }; }
+    if val == "MouseRight" { return Action { vk: 0, is_mouse_left: false, is_mouse_right: true }; }
+    if val.starts_with("Key:") {
+        let hex = &val[4..];
+        if let Ok(vk) = u16::from_str_radix(hex, 16) {
+            return Action { vk, is_mouse_left: false, is_mouse_right: false };
+        }
+    }
+    Action { vk: 0, is_mouse_left: false, is_mouse_right: false } // None
+}
+
+// Membaca config.ini
+fn load_bindings() -> HashMap<String, Action> {
+    let mut map = HashMap::new();
+    
+    // Default bawaan jika config.ini tidak ditemukan
+    map.insert("Cross".to_string(), parse_key("MouseLeft"));
+    map.insert("Circle".to_string(), parse_key("MouseRight"));
+    
+    if let Ok(content) = fs::read_to_string("config.ini") {
+        let mut section = String::new();
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') || line.starts_with(';') { continue; }
+            if line.starts_with('[') && line.ends_with(']') {
+                section = line[1..line.len()-1].to_string();
+                continue;
+            }
+            if let Some((key, val)) = line.split_once('=') {
+                let key = key.trim();
+                let val = val.trim();
+                if section == "Bindings" {
+                    map.insert(key.to_string(), parse_key(val));
+                }
+            }
+        }
+        println!("[DEBUG] config.ini berhasil dibaca.");
+    } else {
+        println!("[WARN] config.ini tidak ditemukan, menggunakan default (Cross/Circle).");
+    }
+    map
+}
 
 pub fn run_xinput_gopher(is_running: Arc<AtomicBool>) {
     let handle = match XInputHandle::load_default() {
         Ok(h) => h,
         Err(_) => {
-            println!("[ERROR] Gagal memuat XInput DLL. Pastikan DS4Windows atau driver XInput terinstal.");
+            println!("[ERROR] Gagal memuat XInput DLL. Pastikan DS4Windows terinstal.");
             return;
         }
     };
+    
+    let bindings = load_bindings();
+    
+    // Menyimpan status tombol sebelumnya (untuk mencegah spam penekanan)
+    let mut last_states: HashMap<String, bool> = HashMap::new();
+    let mut accum_x = 0.0;
+    let mut accum_y = 0.0;
+    let mut accum_ry = 0.0;
 
     println!("[DEBUG] XInput berhasil dimuat. Menunggu controller...");
 
-    let mut last_click = false;
-    let mut accum_x = 0.0;
-    let mut accum_y = 0.0;
-    let mut debug_counter = 0;
-
     while is_running.load(Ordering::Relaxed) {
-        match handle.get_state(0) {
-            Ok(state) => {
-                let lx = (state.raw.Gamepad.sThumbLX as f32) / 32767.0;
-                let ly = (state.raw.Gamepad.sThumbLY as f32) / 32767.0;
+        if let Ok(state) = handle.get_state(0) {
+            let lx = (state.raw.Gamepad.sThumbLX as f32) / 32767.0;
+            let ly = (state.raw.Gamepad.sThumbLY as f32) / 32767.0;
+            let ry = (state.raw.Gamepad.sThumbRY as f32) / 32767.0;
+            
+            let deadzone = 0.15;
 
-                debug_counter += 1;
-                if debug_counter >= 50 {
-                    if lx.abs() > 0.1 || ly.abs() > 0.1 {
-                        println!("[DEBUG] Stick: X={:.2} Y={:.2}", lx, ly);
-                    }
-                    debug_counter = 0;
+            // --- LEFT STICK -> MOUSE MOVE ---
+            if lx.abs() > deadzone || ly.abs() > deadzone {
+                accum_x += lx * 15.0;
+                accum_y += -ly * 15.0; // Dibalik karena standar Mouse vs XInput berbeda
+                let dx = accum_x as i32;
+                let dy = accum_y as i32;
+                if dx != 0 || dy != 0 {
+                    input_utils::move_mouse_hybrid(dx, dy);
+                    accum_x -= dx as f32;
+                    accum_y -= dy as f32;
                 }
-
-                let deadzone = 0.15;
-                if lx.abs() > deadzone || ly.abs() > deadzone {
-                    accum_x += lx * 15.0;
-                    // PERBAIKAN: Tambahkan tanda minus di depan ly
-                    // karena Y positif di XInput = Atas, tapi Y positif di Mouse = Bawah
-                    accum_y += -ly * 15.0;
-                    
-                    let dx = accum_x as i32;
-                    let dy = accum_y as i32;
-                    if dx != 0 || dy != 0 {
-                        input_utils::move_mouse_hybrid(dx, dy);
-                        accum_x -= dx as f32;
-                        accum_y -= dy as f32;
-                    }
-                } else {
-                    accum_x = 0.0;
-                    accum_y = 0.0;
-                }
-
-                let current_click = (state.raw.Gamepad.wButtons & 0x1000) != 0;
-                if current_click != last_click {
-                    input_utils::mouse_click(current_click);
-                    last_click = current_click;
-                }
+            } else {
+                accum_x = 0.0;
+                accum_y = 0.0;
             }
-            Err(_) => {
-                if last_click {
-                    input_utils::mouse_click(false);
-                    last_click = false;
+
+            // --- RIGHT STICK -> SCROLL ---
+            if ry.abs() > deadzone {
+                accum_ry += ry * 40.0; // Ubah angka 40.0 untuk mengatur kecepatan scroll
+                let scroll = accum_ry as i32;
+                if scroll != 0 {
+                    input_utils::scroll_mouse(scroll);
+                    accum_ry -= scroll as f32;
                 }
-                thread::sleep(Duration::from_millis(200));
+            } else {
+                accum_ry = 0.0;
+            }
+
+            // --- BUTTONS ---
+            let buttons = state.raw.Gamepad.wButtons;
+            
+            // Map status tombol saat ini (XInput bitmask)
+            let btn_map = vec![
+                ("Cross",     (buttons & 0x1000) != 0),
+                ("Circle",    (buttons & 0x2000) != 0),
+                ("Square",    (buttons & 0x4000) != 0),
+                ("Triangle",  (buttons & 0x8000) != 0),
+                ("L1",        (buttons & 0x0100) != 0),
+                ("R1",        (buttons & 0x0200) != 0),
+                ("Share",     (buttons & 0x0020) != 0), // Back
+                ("Options",   (buttons & 0x0010) != 0), // Start
+                ("R3",        (buttons & 0x0080) != 0),
+                ("DpadUp",    (buttons & 0x0001) != 0),
+                ("DpadDown",  (buttons & 0x0002) != 0),
+                ("DpadLeft",  (buttons & 0x0004) != 0),
+                ("DpadRight", (buttons & 0x0008) != 0),
+                ("L2",        state.raw.Gamepad.bLeftTrigger > 30),
+                ("R2",        state.raw.Gamepad.bRightTrigger > 30),
+            ];
+
+            // Eksekusi aksi berdasarkan config.ini
+            for (name, is_pressed) in btn_map {
+                let last_pressed = *last_states.get(name).unwrap_or(&false);
+                if is_pressed != last_pressed {
+                    if let Some(action) = bindings.get(name) {
+                        if action.is_mouse_left {
+                            input_utils::mouse_click(is_pressed);
+                        } else if action.is_mouse_right {
+                            input_utils::mouse_click_right(is_pressed);
+                        } else if action.vk != 0 {
+                            input_utils::key_press(action.vk, is_pressed);
+                        }
+                    }
+                    last_states.insert(name.to_string(), is_pressed);
+                }
             }
         }
         thread::sleep(Duration::from_millis(20));

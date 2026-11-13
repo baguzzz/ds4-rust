@@ -17,6 +17,7 @@ pub fn move_mouse_hybrid(dx: i32, dy: i32) {
     };
     let result = unsafe { SendInput(&[input], std::mem::size_of::<INPUT>() as i32) };
     
+    // Fallback ke SetCursorPos jika SendInput gagal
     if result == 0 {
         unsafe {
             let mut pos = POINT { x: 0, y: 0 };
@@ -34,6 +35,53 @@ pub fn mouse_click(down: bool) {
             mi: MOUSEINPUT {
                 dx: 0, dy: 0, mouseData: 0,
                 dwFlags: if down { MOUSEEVENTF_LEFTDOWN } else { MOUSEEVENTF_LEFTUP },
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+    unsafe { SendInput(&[input], std::mem::size_of::<INPUT>() as i32); }
+}
+
+pub fn mouse_click_right(down: bool) {
+    let input = INPUT {
+        r#type: INPUT_MOUSE,
+        Anonymous: INPUT_0 {
+            mi: MOUSEINPUT {
+                dx: 0, dy: 0, mouseData: 0,
+                dwFlags: if down { MOUSEEVENTF_RIGHTDOWN } else { MOUSEEVENTF_RIGHTUP },
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+    unsafe { SendInput(&[input], std::mem::size_of::<INPUT>() as i32); }
+}
+
+pub fn scroll_mouse(amount: i32) {
+    let input = INPUT {
+        r#type: INPUT_MOUSE,
+        Anonymous: INPUT_0 {
+            mi: MOUSEINPUT {
+                dx: 0, dy: 0,
+                mouseData: amount as u32,
+                dwFlags: MOUSEEVENTF_WHEEL,
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+    unsafe { SendInput(&[input], std::mem::size_of::<INPUT>() as i32); }
+}
+
+pub fn key_press(vk: u16, down: bool) {
+    let input = INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: VIRTUAL_KEY(vk),
+                wScan: 0,
+                dwFlags: if down { KEYBD_EVENT_FLAGS(0) } else { KEYEVENTF_KEYUP },
                 time: 0,
                 dwExtraInfo: 0,
             },
