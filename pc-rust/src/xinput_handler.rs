@@ -7,33 +7,30 @@ use std::collections::HashMap;
 use std::fs;
 use crate::input_utils;
 
-// Struct untuk menyimpan aksi dari config.ini
+#[derive(Clone)]
 struct Action {
     vk: u16,
     is_mouse_left: bool,
     is_mouse_right: bool,
 }
 
-// Menerjemahkan string dari config.ini menjadi aksi
+// PERBAIKAN: Fungsi ini sekarang membuang awalan "0x" sebelum membaca Hex
 fn parse_key(val: &str) -> Action {
     if val == "MouseLeft" { return Action { vk: 0, is_mouse_left: true, is_mouse_right: false }; }
     if val == "MouseRight" { return Action { vk: 0, is_mouse_left: false, is_mouse_right: true }; }
     if val.starts_with("Key:") {
-        let hex = &val[4..];
-        if let Ok(vk) = u16::from_str_radix(hex, 16) {
+        let hex_str = &val[4..];
+        // Bersihkan awalan "0x" atau "0X"
+        let clean_hex = hex_str.trim_start_matches("0x").trim_start_matches("0X");
+        if let Ok(vk) = u16::from_str_radix(clean_hex, 16) {
             return Action { vk, is_mouse_left: false, is_mouse_right: false };
         }
     }
-    Action { vk: 0, is_mouse_left: false, is_mouse_right: false } // None
+    Action { vk: 0, is_mouse_left: false, is_mouse_right: false }
 }
 
-// Membaca config.ini
 fn load_bindings() -> HashMap<String, Action> {
     let mut map = HashMap::new();
-    
-    // Default bawaan jika config.ini tidak ditemukan
-    map.insert("Cross".to_string(), parse_key("MouseLeft"));
-    map.insert("Circle".to_string(), parse_key("MouseRight"));
     
     if let Ok(content) = fs::read_to_string("config.ini") {
         let mut section = String::new();
@@ -54,7 +51,7 @@ fn load_bindings() -> HashMap<String, Action> {
         }
         println!("[DEBUG] config.ini berhasil dibaca.");
     } else {
-        println!("[WARN] config.ini tidak ditemukan, menggunakan default (Cross/Circle).");
+        println!("[WARN] config.ini tidak ditemukan! Menggunakan default.");
     }
     map
 }
@@ -70,7 +67,6 @@ pub fn run_xinput_gopher(is_running: Arc<AtomicBool>) {
     
     let bindings = load_bindings();
     
-    // Menyimpan status tombol sebelumnya (untuk mencegah spam penekanan)
     let mut last_states: HashMap<String, bool> = HashMap::new();
     let mut accum_x = 0.0;
     let mut accum_y = 0.0;
@@ -89,7 +85,7 @@ pub fn run_xinput_gopher(is_running: Arc<AtomicBool>) {
             // --- LEFT STICK -> MOUSE MOVE ---
             if lx.abs() > deadzone || ly.abs() > deadzone {
                 accum_x += lx * 15.0;
-                accum_y += -ly * 15.0; // Dibalik karena standar Mouse vs XInput berbeda
+                accum_y += -ly * 15.0; // Dibalik (Atas = positif XInput, Atas = negatif Mouse)
                 let dx = accum_x as i32;
                 let dy = accum_y as i32;
                 if dx != 0 || dy != 0 {
@@ -104,7 +100,7 @@ pub fn run_xinput_gopher(is_running: Arc<AtomicBool>) {
 
             // --- RIGHT STICK -> SCROLL ---
             if ry.abs() > deadzone {
-                accum_ry += ry * 40.0; // Ubah angka 40.0 untuk mengatur kecepatan scroll
+                accum_ry += ry * 40.0;
                 let scroll = accum_ry as i32;
                 if scroll != 0 {
                     input_utils::scroll_mouse(scroll);
@@ -114,24 +110,35 @@ pub fn run_xinput_gopher(is_running: Arc<AtomicBool>) {
                 accum_ry = 0.0;
             }
 
-            // --- BUTTONS ---
+            // --- BUTTONS (LENGKAP) ---
             let buttons = state.raw.Gamepad.wButtons;
             
-            // Map status tombol saat ini (XInput bitmask)
             let btn_map = vec![
+                // Face Buttons
                 ("Cross",     (buttons & 0x1000) != 0),
                 ("Circle",    (buttons & 0x2000) != 0),
                 ("Square",    (buttons & 0x4000) != 0),
                 ("Triangle",  (buttons & 0x8000) != 0),
+                
+                // Bumpers
                 ("L1",        (buttons & 0x0100) != 0),
                 ("R1",        (buttons & 0x0200) != 0),
-                ("Share",     (buttons & 0x0020) != 0), // Back
-                ("Options",   (buttons & 0x0010) != 0), // Start
+                
+                // Start/Back
+                ("Share",     (buttons & 0x0020) != 0), // Back / Share
+                ("Options",   (buttons & 0x0010) != 0), // Start / Options
+                
+                // Stick Clicks (PERBAIKAN: L3 Ditambahkan)
+                ("L3",        (buttons & 0x0040) != 0),
                 ("R3",        (buttons & 0x0080) != 0),
+                
+                // D-Pad
                 ("DpadUp",    (buttons & 0x0001) != 0),
                 ("DpadDown",  (buttons & 0x0002) != 0),
                 ("DpadLeft",  (buttons & 0x0004) != 0),
                 ("DpadRight", (buttons & 0x0008) != 0),
+                
+                // Triggers (Analog, dianggap ditekan jika > 30)
                 ("L2",        state.raw.Gamepad.bLeftTrigger > 30),
                 ("R2",        state.raw.Gamepad.bRightTrigger > 30),
             ];
