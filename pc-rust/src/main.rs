@@ -20,7 +20,6 @@ impl Default for DS4App {
         Self {
             local_status: "Status: Mati".to_owned(),
             server_status: "Status: Mati".to_owned(),
-            // PERBAIKAN: Panggil fungsi get_local_ip dari modul input_utils
             ip_address: input_utils::get_local_ip(),
             is_local_running: Arc::new(AtomicBool::new(false)),
             is_server_running: Arc::new(AtomicBool::new(false)),
@@ -31,11 +30,11 @@ impl Default for DS4App {
 impl eframe::App for DS4App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("DS4 Unified - Rust Edition (Modular)");
+            ui.heading("DS4 Unified - Rust Edition");
             ui.separator();
 
             ui.group(|ui| {
-                ui.label("Local Controller (XInput) -> Menggerakkan Mouse PC");
+                ui.label("Local Controller (XInput) -> Mouse/Keyboard");
                 ui.horizontal(|ui| {
                     let is_running = self.is_local_running.load(Ordering::Relaxed);
                     if ui.button(if is_running { "Hentikan Gopher Lokal" } else { "Mulai Gopher Lokal" }).clicked() {

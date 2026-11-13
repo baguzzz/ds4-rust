@@ -17,7 +17,6 @@ pub fn move_mouse_hybrid(dx: i32, dy: i32) {
     };
     let result = unsafe { SendInput(&[input], std::mem::size_of::<INPUT>() as i32) };
     
-    // Fallback ke SetCursorPos jika SendInput gagal
     if result == 0 {
         unsafe {
             let mut pos = POINT { x: 0, y: 0 };
