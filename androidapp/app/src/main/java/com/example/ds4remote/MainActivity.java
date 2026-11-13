@@ -13,6 +13,7 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -49,13 +50,12 @@ public class MainActivity extends AppCompatActivity {
     private boolean isEditMode = false;
     private SharedPreferences prefs;
 
-    // State Gamepad (Data yang akan dikirim ke PC)
+    // State
     private volatile int buttons = 0;
     private volatile int lx = 128, ly = 128, rx = 128, ry = 128;
     private volatile int l2 = 0, r2 = 0;
-    private volatile int dpad = 8; // 8 = Netral
+    private volatile int dpad = 8;
 
-    // Indeks Bit untuk Tombol (Sesuai dengan Rust PC)
     private static final int BTN_CROSS=0, BTN_CIRCLE=1, BTN_SQUARE=2, BTN_TRIANGLE=3, BTN_L1=4, BTN_R1=5,
             BTN_SHARE=6, BTN_OPTIONS=7, BTN_L3=8, BTN_R3=9, BTN_PS=10, BTN_TOUCHPAD=11;
 
@@ -105,7 +105,6 @@ public class MainActivity extends AppCompatActivity {
         JoystickView leftStick = findViewById(R.id.leftStick);
         JoystickView rightStick = findViewById(R.id.rightStick);
 
-        // --- Setup Analog Sticks ---
         leftStick.setOnMoveListener((x, y) -> {
             if (isEditMode) return;
             lx = clamp255((x + 1f) / 2f * 255f);
@@ -120,31 +119,28 @@ public class MainActivity extends AppCompatActivity {
         applyEditTouchOnly(leftStick);
         applyEditTouchOnly(rightStick);
 
-        // --- Setup Tombol Biasa (A, B, X, Y, L1, R1, Start, Back, dll) ---
         setupButton(R.id.btnA, BTN_CROSS);
         setupButton(R.id.btnB, BTN_CIRCLE);
         setupButton(R.id.btnX, BTN_SQUARE);
         setupButton(R.id.btnY, BTN_TRIANGLE);
         setupButton(R.id.btnL1, BTN_L1);
         setupButton(R.id.btnR1, BTN_R1);
-        setupButton(R.id.btnShare, BTN_SHARE);       // Back / Share
-        setupButton(R.id.btnOptions, BTN_OPTIONS);   // Start / Options
+        setupButton(R.id.btnShare, BTN_SHARE);
+        setupButton(R.id.btnOptions, BTN_OPTIONS);
         setupButton(R.id.btnL3, BTN_L3);
         setupButton(R.id.btnR3, BTN_R3);
         setupButton(R.id.btnPS, BTN_PS);
         setupButton(R.id.btnTouchpad, BTN_TOUCHPAD);
 
-        // --- Setup Trigger L2 / R2 ---
-        setupTrigger(R.id.btnL2, true);
-        setupTrigger(R.id.btnR2, false);
+        // SETUP SLIDER L2 / R2
+        setupTriggerSlider(R.id.btnL2, true);
+        setupTriggerSlider(R.id.btnR2, false);
 
-        // --- Setup D-Pad ---
         setupDpad(R.id.dpadUp, 0);
         setupDpad(R.id.dpadRight, 2);
         setupDpad(R.id.dpadDown, 4);
         setupDpad(R.id.dpadLeft, 6);
 
-        // --- Tombol UI ---
         editLayoutBtn.setOnClickListener(v -> {
             isEditMode = !isEditMode;
             if (isEditMode) {
@@ -189,6 +185,28 @@ public class MainActivity extends AppCompatActivity {
 
         gamepadArea.post(this::loadLayout);
         startSendLoop();
+    }
+
+    // ================= LAYOUT & TRIGGER =================
+
+    private void setupTriggerSlider(int id, boolean isL2) {
+        SeekBar sb = findViewById(id);
+        
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (isEditMode) return;
+                // Konversi 0-100 menjadi 0-255
+                int val = (int) ((progress / 100.0) * 255);
+                if (isL2) l2 = val;
+                else r2 = val;
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+
+        // Agar slider bisa digeser (drag) saat Mode Edit
+        applyEditTouchOnly(sb);
     }
 
     // ================= LOGIKA PENGIRIMAN DATA (TCP) =================
@@ -267,7 +285,7 @@ public class MainActivity extends AppCompatActivity {
         out.write(p);
     }
 
-    // ================= HANDLER TOMBOL =================
+    // ================= HANDLER TOMBOL & EDIT MODE =================
     private static int clamp255(float v) {
         return (int) Math.max(0, Math.min(255, v));
     }
@@ -280,23 +298,15 @@ public class MainActivity extends AppCompatActivity {
         );
     }
 
-    private void setupTrigger(int id, boolean isL2) {
-        Button b = findViewById(id);
-        applyEditAndGamepadTouch(b, 
-            () -> { if (!isEditMode) { if (isL2) l2 = 255; else r2 = 255; } },
-            () -> { if (!isEditMode) { if (isL2) l2 = 0; else r2 = 0; } }
-        );
-    }
-
     private void setupDpad(int id, int dpadValue) {
         View b = findViewById(id);
         applyEditAndGamepadTouch(b, 
             () -> { if (!isEditMode) dpad = dpadValue; },
-            () -> { if (!isEditMode) dpad = 8; } // 8 = Netral
+            () -> { if (!isEditMode) dpad = 8; }
         );
     }
 
-    // ================= LOGIKA EDIT LAYOUT (GESER) =================
+    // Listener yang bisa membedakan Mode Edit (geser) dan Mode Main (tekan tombol)
     private void applyEditAndGamepadTouch(View view, Runnable onPress, Runnable onRelease) {
         view.setOnTouchListener(new View.OnTouchListener() {
             float startX, startY, initialX, initialY;
@@ -345,13 +355,14 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    // Listener khusus Analog & Slider (Hanya menggeser saat mode Edit, normal saat mode main)
     private void applyEditTouchOnly(View view) {
         view.setOnTouchListener(new View.OnTouchListener() {
             float startX, startY, initialX, initialY;
 
             @Override
             public boolean onTouch(View v, MotionEvent event) {
-                if (!isEditMode) return false;
+                if (!isEditMode) return false; // Biarkan slider/analog bekerja normal
 
                 switch (event.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
@@ -382,6 +393,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    // ================= SIMPAN & MUAT LAYOUT =================
     private void loadLayout() {
         boolean loaded = false;
         for (int id : allIds) {
