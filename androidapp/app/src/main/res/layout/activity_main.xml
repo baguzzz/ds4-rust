@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#101114">
+
+    <!-- LATAR BELAKANG CONTROLLER SVG -->
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_centerInParent="true"
+        android:scaleType="fitCenter"
+        android:src="@drawable/controller_outline"
+        android:alpha="0.6"
+        android:id="@+id/bg_controller"/>
+
+    <!-- AREA GAMEPAD (Tombol menumpang di atas SVG) -->
+    <FrameLayout
+        android:id="@+id/gamepadArea"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@+id/topBar">
+
+        <!-- D-PAD -->
+        <Button android:id="@+id/dpadUp" android:text="▲"
+            android:layout_width="50dp" android:layout_height="50dp" android:padding="0dp" android:textSize="18sp"
+            android:background="@android:color/transparent" android:textColor="#C5C8CC" />
+        <Button android:id="@+id/dpadDown" android:text="▼"
+            android:layout_width="50dp" android:layout_height="50dp" android:padding="0dp" android:textSize="18sp"
+            android:background="@android:color/transparent" android:textColor="#C5C8CC" />
+        <Button android:id="@+id/dpadLeft" android:text="◀"
+            android:layout_width="50dp" android:layout_height="50dp" android:padding="0dp" android:textSize="18sp"
+            android:background="@android:color/transparent" android:textColor="#C5C8CC" />
+        <Button android:id="@+id/dpadRight" android:text="▶"
+            android:layout_width="50dp" android:layout_height="50dp" android:padding="0dp" android:textSize="18sp"
+            android:background="@android:color/transparent" android:textColor="#C5C8CC" />
+
+        <!-- FACE BUTTONS -->
+        <Button android:id="@+id/btnY" android:text="△"
+            android:layout_width="55dp" android:layout_height="55dp" android:padding="0dp" android:textSize="22sp"
+            android:background="@android:color/transparent" android:textColor="#4CAF50" />
+        <Button android:id="@+id/btnA" android:text="✕"
+            android:layout_width="55dp" android:layout_height="55dp" android:padding="0dp" android:textSize="22sp"
+            android:background="@android:color/transparent" android:textColor="#F44336" />
+        <Button android:id="@+id/btnX" android:text="□"
+            android:layout_width="55dp" android:layout_height="55dp" android:padding="0dp" android:textSize="22sp"
+            android:background="@android:color/transparent" android:textColor="#2196F3" />
+        <Button android:id="@+id/btnB" android:text="○"
+            android:layout_width="55dp" android:layout_height="55dp" android:padding="0dp" android:textSize="22sp"
+            android:background="@android:color/transparent" android:textColor="#F44336" />
+
+        <!-- SHOULDER BUTTONS -->
+        <Button android:id="@+id/btnL1" android:text="L1"
+            android:layout_width="60dp" android:layout_height="40dp" android:padding="0dp" android:textSize="14sp"
+            android:background="@android:color/transparent" android:textColor="#C5C8CC" />
+        <Button android:id="@+id/btnL2" android:text="L2"
+            android:layout_width="60dp" android:layout_height="40dp" android:padding="0dp" android:textSize="14sp"
+            android:background="@android:color/transparent" android:textColor="#C5C8CC" />
+        <Button android:id="@+id/btnR1" android:text="R1"
+            android:layout_width="60dp" android:layout_height="40dp" android:padding="0dp" android:textSize="14sp"
+            android:background="@android:color/transparent" android:textColor="#C5C8CC" />
+        <Button android:id="@+id/btnR2" android:text="R2"
+            android:layout_width="60dp" android:layout_height="40dp" android:padding="0dp" android:textSize="14sp"
+            android:background="@android:color/transparent" android:textColor="#C5C8CC" />
+
+        <!-- CENTER BUTTONS -->
+        <Button android:id="@+id/btnShare" android:text="SHARE"
+            android:layout_width="60dp" android:layout_height="40dp" android:padding="0dp" android:textSize="10sp"
+            android:background="@android:color/transparent" android:textColor="#C5C8CC" />
+        <Button android:id="@+id/btnPS" android:text="PS"
+            android:layout_width="50dp" android:layout_height="40dp" android:padding="0dp" android:textSize="12sp"
+            android:background="@android:color/transparent" android:textColor="#C5C8CC" />
+        <Button android:id="@+id/btnOptions" android:text="OPTIONS"
+            android:layout_width="70dp" android:layout_height="40dp" android:padding="0dp" android:textSize="10sp"
+            android:background="@android:color/transparent" android:textColor="#C5C8CC" />
+
+        <!-- ANALOG STICKS -->
+        <!-- Warna diatur langsung dari JoystickView.java -->
+        <com.example.ds4remote.JoystickView
+            android:id="@+id/leftStick"
+            android:layout_width="160dp" android:layout_height="160dp" />
+        <com.example.ds4remote.JoystickView
+            android:id="@+id/rightStick"
+            android:layout_width="160dp" android:layout_height="160dp" />
+
+        <!-- L3 / R3 / TOUCHPAD -->
+        <Button android:id="@+id/btnL3" android:text="L3"
+            android:layout_width="55dp" android:layout_height="40dp" android:padding="0dp" android:textSize="12sp"
+            android:background="@android:color/transparent" android:textColor="#C5C8CC" />
+        <Button android:id="@+id/btnTouchpad" android:text="TOUCHPAD"
+            android:layout_width="100dp" android:layout_height="40dp" android:padding="0dp" android:textSize="10sp"
+            android:background="@android:color/transparent" android:textColor="#C5C8CC" />
+        <Button android:id="@+id/btnR3" android:text="R3"
+            android:layout_width="55dp" android:layout_height="40dp" android:padding="0dp" android:textSize="12sp"
+            android:background="@android:color/transparent" android:textColor="#C5C8CC" />
+    </FrameLayout>
+
+    <!-- TOP BAR (Koneksi) -->
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="10dp"
+        android:background="#0B0C0E"
+        android:gravity="center_vertical"
+        android:layout_alignParentTop="true">
+
+        <TextView android:id="@+id/status" android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:textColor="#C5C8CC" android:textSize="12sp" android:text="Disconnected"/>
+
+        <EditText android:id="@+id/ipInput" android:layout_width="110dp" android:layout_height="36dp"
+            android:hint="192.168.1.10" android:textColorHint="#555" android:textColor="#FFF"
+            android:textSize="12sp" android:inputType="text" android:background="#1A1C21" android:padding="8dp"/>
+
+        <Button android:id="@+id/connectBtn" android:layout_width="wrap_content" android:layout_height="36dp"
+            android:text="CONNECT" android:textSize="11sp" android:layout_marginStart="8dp"
+            android:backgroundTint="#4CAF50" android:textColor="#FFFFFF"/>
+
+        <Button android:id="@+id/editLayoutBtn" android:layout_width="wrap_content" android:layout_height="36dp"
+            android:text="EDIT" android:textSize="11sp" android:layout_marginStart="8dp"
+            android:backgroundTint="#FF9800" android:textColor="#000000"/>
+            
+        <!-- Tombol tambahan untuk Edit Mode -->
+        <Button android:id="@+id/resetLayoutBtn" android:layout_width="wrap_content" android:layout_height="36dp"
+            android:text="RESET" android:textSize="11sp" android:layout_marginStart="8dp"
+            android:backgroundTint="#F44336" android:textColor="#FFFFFF" android:visibility="gone"/>
+        <Button android:id="@+id/exportLayoutBtn" android:layout_width="wrap_content" android:layout_height="36dp"
+            android:text="SAVE" android:textSize="11sp" android:layout_marginStart="8dp"
+            android:backgroundTint="#2196F3" android:textColor="#FFFFFF" android:visibility="gone"/>
+        <Button android:id="@+id/importLayoutBtn" android:layout_width="wrap_content" android:layout_height="36dp"
+            android:text="LOAD" android:textSize="11sp" android:layout_marginStart="8dp"
+            android:backgroundTint="#9C27B0" android:textColor="#FFFFFF" android:visibility="gone"/>
+    </LinearLayout>
+
+</RelativeLayout>

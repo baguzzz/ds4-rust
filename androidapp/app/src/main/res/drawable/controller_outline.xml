@@ -1,0 +1,57 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="800dp"
+    android:height="500dp"
+    android:viewportWidth="800"
+    android:viewportHeight="500">
+    
+    <!-- Body Outline -->
+    <path
+        android:strokeColor="#3A3C42"
+        android:strokeWidth="4"
+        android:fillColor="#00000000"
+        android:pathData="M220,120 C320,90 480,90 580,120 C640,140 700,260 720,360 C730,430 680,460 620,430 C570,400 550,340 500,340 L300,340 C250,340 230,400 180,430 C120,460 70,430 80,360 C100,260 160,140 220,120 Z" />
+        
+    <!-- Touchpad -->
+    <path
+        android:strokeColor="#3A3C42"
+        android:strokeWidth="4"
+        android:fillColor="#00000000"
+        android:pathData="M320,100 L480,100 A10,10 0 0,1 490,110 L490,200 A10,10 0 0,1 480,210 L320,210 A10,10 0 0,1 310,200 L310,110 A10,10 0 0,1 320,100 Z" />
+        
+    <!-- D-Pad Outline -->
+    <path
+        android:strokeColor="#3A3C42"
+        android:strokeWidth="3"
+        android:fillColor="#00000000"
+        android:pathData="M210,160 L240,160 L240,130 L270,130 L270,160 L300,160 L300,190 L270,190 L270,220 L240,220 L240,190 L210,190 Z" />
+        
+    <!-- Left Stick Outline -->
+    <path
+        android:strokeColor="#3A3C42"
+        android:strokeWidth="3"
+        android:fillColor="#00000000"
+        android:pathData="M270,270 A40,40 0 1,0 270,350 A40,40 0 1,0 270,270 Z" />
+    <path
+        android:strokeColor="#3A3C42"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"
+        android:pathData="M270,285 A25,25 0 1,0 270,335 A25,25 0 1,0 270,285 Z" />
+
+    <!-- Right Stick Outline -->
+    <path
+        android:strokeColor="#3A3C42"
+        android:strokeWidth="3"
+        android:fillColor="#00000000"
+        android:pathData="M530,270 A40,40 0 1,0 530,350 A40,40 0 1,0 530,270 Z" />
+    <path
+        android:strokeColor="#3A3C42"
+        android:strokeWidth="2"
+        android:fillColor="#00000000"
+        android:pathData="M530,285 A25,25 0 1,0 530,335 A25,25 0 1,0 530,285 Z" />
+
+    <!-- Face Buttons Outline -->
+    <path android:strokeColor="#3A3C42" android:strokeWidth="2" android:fillColor="#00000000" android:pathData="M580,140 A15,15 0 1,0 580,170 A15,15 0 1,0 580,140 Z" />
+    <path android:strokeColor="#3A3C42" android:strokeWidth="2" android:fillColor="#00000000" android:pathData="M610,170 A15,15 0 1,0 610,200 A15,15 0 1,0 610,170 Z" />
+    <path android:strokeColor="#3A3C42" android:strokeWidth="2" android:fillColor="#00000000" android:pathData="M550,170 A15,15 0 1,0 550,200 A15,15 0 1,0 550,170 Z" />
+    <path android:strokeColor="#3A3C42" android:strokeWidth="2" android:fillColor="#00000000" android:pathData="M580,200 A15,15 0 1,0 580,230 A15,15 0 1,0 580,200 Z" />
+</vector>
