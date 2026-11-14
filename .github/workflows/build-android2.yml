@@ -36,7 +36,7 @@ jobs:
         run: gradle --version
 
       - name: Build Debug APK
-        working-directory: android
+        working-directory: androidapp
         run: gradle assembleDebug --stacktrace
 
       - name: Upload APK
