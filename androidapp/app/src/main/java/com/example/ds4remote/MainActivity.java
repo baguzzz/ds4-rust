@@ -187,7 +187,7 @@ public class MainActivity extends AppCompatActivity {
         startSendLoop();
     }
 
-    // ================= LAYOUT & TRIGGER =================
+    // ================= SLIDER TRIGGER (SPRING-LOADED) =================
 
     private void setupTriggerSlider(int id, boolean isL2) {
         SeekBar sb = findViewById(id);
@@ -201,8 +201,16 @@ public class MainActivity extends AppCompatActivity {
                 if (isL2) l2 = val;
                 else r2 = val;
             }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+
+            @Override 
+            public void onStartTrackingTouch(SeekBar seekBar) {}
+
+            @Override 
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                if (isEditMode) return;
+                // PERBAIKAN: Kembalikan slider ke 0 secara instan saat jari dilepas
+                seekBar.setProgress(0); 
+            }
         });
 
         // Agar slider bisa digeser (drag) saat Mode Edit
@@ -306,7 +314,6 @@ public class MainActivity extends AppCompatActivity {
         );
     }
 
-    // Listener yang bisa membedakan Mode Edit (geser) dan Mode Main (tekan tombol)
     private void applyEditAndGamepadTouch(View view, Runnable onPress, Runnable onRelease) {
         view.setOnTouchListener(new View.OnTouchListener() {
             float startX, startY, initialX, initialY;
@@ -355,14 +362,13 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // Listener khusus Analog & Slider (Hanya menggeser saat mode Edit, normal saat mode main)
     private void applyEditTouchOnly(View view) {
         view.setOnTouchListener(new View.OnTouchListener() {
             float startX, startY, initialX, initialY;
 
             @Override
             public boolean onTouch(View v, MotionEvent event) {
-                if (!isEditMode) return false; // Biarkan slider/analog bekerja normal
+                if (!isEditMode) return false;
 
                 switch (event.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
