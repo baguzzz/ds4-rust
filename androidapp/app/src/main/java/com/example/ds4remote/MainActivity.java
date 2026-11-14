@@ -59,10 +59,11 @@ public class MainActivity extends AppCompatActivity {
     private static final int BTN_CROSS=0, BTN_CIRCLE=1, BTN_SQUARE=2, BTN_TRIANGLE=3, BTN_L1=4, BTN_R1=5,
             BTN_SHARE=6, BTN_OPTIONS=7, BTN_L3=8, BTN_R3=9, BTN_PS=10, BTN_TOUCHPAD=11;
 
+    // PERBAIKAN: Masukkan containerL2 dan containerR2 ke array
     private final int[] allIds = {
         R.id.dpadUp, R.id.dpadDown, R.id.dpadLeft, R.id.dpadRight,
         R.id.btnY, R.id.btnX, R.id.btnA, R.id.btnB,
-        R.id.btnL1, R.id.btnL2, R.id.btnR1, R.id.btnR2,
+        R.id.btnL1, R.id.containerL2, R.id.btnR1, R.id.containerR2, // Gunakan Container
         R.id.btnShare, R.id.btnPS, R.id.btnOptions,
         R.id.leftStick, R.id.rightStick,
         R.id.btnL3, R.id.btnTouchpad, R.id.btnR3
@@ -132,9 +133,9 @@ public class MainActivity extends AppCompatActivity {
         setupButton(R.id.btnPS, BTN_PS);
         setupButton(R.id.btnTouchpad, BTN_TOUCHPAD);
 
-        // SETUP SLIDER L2 / R2
-        setupTriggerSlider(R.id.btnL2, true);
-        setupTriggerSlider(R.id.btnR2, false);
+        // SETUP SLIDER L2 / R2 (Menggunakan SeekBar ID dan Container ID)
+        setupTriggerSlider(R.id.btnL2, R.id.containerL2, true);
+        setupTriggerSlider(R.id.btnR2, R.id.containerR2, false);
 
         setupDpad(R.id.dpadUp, 0);
         setupDpad(R.id.dpadRight, 2);
@@ -187,16 +188,17 @@ public class MainActivity extends AppCompatActivity {
         startSendLoop();
     }
 
-    // ================= SLIDER TRIGGER (SPRING-LOADED) =================
+    // ================= SLIDER TRIGGER (VERTIKAL) =================
 
-    private void setupTriggerSlider(int id, boolean isL2) {
-        SeekBar sb = findViewById(id);
+    // PERBAIKAN: Tambahkan parameter containerId
+    private void setupTriggerSlider(int seekBarId, int containerId, boolean isL2) {
+        SeekBar sb = findViewById(seekBarId);
+        View container = findViewById(containerId);
         
         sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 if (isEditMode) return;
-                // Konversi 0-100 menjadi 0-255
                 int val = (int) ((progress / 100.0) * 255);
                 if (isL2) l2 = val;
                 else r2 = val;
@@ -208,13 +210,13 @@ public class MainActivity extends AppCompatActivity {
             @Override 
             public void onStopTrackingTouch(SeekBar seekBar) {
                 if (isEditMode) return;
-                // PERBAIKAN: Kembalikan slider ke 0 secara instan saat jari dilepas
+                // Kembalikan ke 0 (pegas)
                 seekBar.setProgress(0); 
             }
         });
 
-        // Agar slider bisa digeser (drag) saat Mode Edit
-        applyEditTouchOnly(sb);
+        // Agar wadah slider bisa digeser (drag) saat Mode Edit
+        applyEditTouchOnly(container);
     }
 
     // ================= LOGIKA PENGIRIMAN DATA (TCP) =================

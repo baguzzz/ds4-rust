@@ -21,29 +21,43 @@
         android:layout_height="match_parent"
         android:layout_below="@+id/topBar">
 
-        <!-- L2 SLIDER (Kiri Atas) -->
-        <SeekBar
-            android:id="@+id/btnL2"
-            android:layout_width="120dp"
-            android:layout_height="40dp"
-            android:max="100"
-            android:progress="0"
-            android:progressTint="#C5C8CC"
-            android:thumbTint="#C5C8CC"
-            android:layout_marginLeft="50dp"
-            android:layout_marginTop="20dp"/>
+        <!-- CONTAINER L2 (Kiri) - VERTIKAL -->
+        <FrameLayout
+            android:id="@+id/containerL2"
+            android:layout_width="70dp"
+            android:layout_height="200dp"
+            android:layout_marginLeft="30dp"
+            android:layout_marginTop="100dp">
+            <SeekBar
+                android:id="@+id/btnL2"
+                android:layout_width="200dp"
+                android:layout_height="70dp"
+                android:layout_gravity="center"
+                android:rotation="-90"
+                android:max="100"
+                android:progress="0"
+                android:progressTint="#C5C8CC"
+                android:thumbTint="#C5C8CC" />
+        </FrameLayout>
 
-        <!-- R2 SLIDER (Kanan Atas) -->
-        <SeekBar
-            android:id="@+id/btnR2"
-            android:layout_width="120dp"
-            android:layout_height="40dp"
-            android:max="100"
-            android:progress="0"
-            android:progressTint="#C5C8CC"
-            android:thumbTint="#C5C8CC"
-            android:layout_marginLeft="600dp"
-            android:layout_marginTop="20dp"/>
+        <!-- CONTAINER R2 (Kanan) - VERTIKAL -->
+        <FrameLayout
+            android:id="@+id/containerR2"
+            android:layout_width="70dp"
+            android:layout_height="200dp"
+            android:layout_marginLeft="700dp"
+            android:layout_marginTop="100dp">
+            <SeekBar
+                android:id="@+id/btnR2"
+                android:layout_width="200dp"
+                android:layout_height="70dp"
+                android:layout_gravity="center"
+                android:rotation="-90"
+                android:max="100"
+                android:progress="0"
+                android:progressTint="#C5C8CC"
+                android:thumbTint="#C5C8CC" />
+        </FrameLayout>
 
         <!-- D-PAD -->
         <Button android:id="@+id/dpadUp" android:text="▲" android:layout_width="50dp" android:layout_height="50dp" android:padding="0dp" android:textSize="18sp" android:background="@android:color/transparent" android:textColor="#C5C8CC" />
