@@ -1,5 +1,6 @@
 package com.example.ds4remote;
 
+import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -59,11 +60,10 @@ public class MainActivity extends AppCompatActivity {
     private static final int BTN_CROSS=0, BTN_CIRCLE=1, BTN_SQUARE=2, BTN_TRIANGLE=3, BTN_L1=4, BTN_R1=5,
             BTN_SHARE=6, BTN_OPTIONS=7, BTN_L3=8, BTN_R3=9, BTN_PS=10, BTN_TOUCHPAD=11;
 
-    // PERBAIKAN: Masukkan containerL2 dan containerR2 ke array
     private final int[] allIds = {
         R.id.dpadUp, R.id.dpadDown, R.id.dpadLeft, R.id.dpadRight,
         R.id.btnY, R.id.btnX, R.id.btnA, R.id.btnB,
-        R.id.btnL1, R.id.containerL2, R.id.btnR1, R.id.containerR2, // Gunakan Container
+        R.id.btnL1, R.id.containerL2, R.id.btnR1, R.id.containerR2,
         R.id.btnShare, R.id.btnPS, R.id.btnOptions,
         R.id.leftStick, R.id.rightStick,
         R.id.btnL3, R.id.btnTouchpad, R.id.btnR3
@@ -133,7 +133,6 @@ public class MainActivity extends AppCompatActivity {
         setupButton(R.id.btnPS, BTN_PS);
         setupButton(R.id.btnTouchpad, BTN_TOUCHPAD);
 
-        // SETUP SLIDER L2 / R2 (Menggunakan SeekBar ID dan Container ID)
         setupTriggerSlider(R.id.btnL2, R.id.containerL2, true);
         setupTriggerSlider(R.id.btnR2, R.id.containerR2, false);
 
@@ -144,6 +143,9 @@ public class MainActivity extends AppCompatActivity {
 
         editLayoutBtn.setOnClickListener(v -> {
             isEditMode = !isEditMode;
+            SeekBar sbL2 = findViewById(R.id.btnL2);
+            SeekBar sbR2 = findViewById(R.id.btnR2);
+            
             if (isEditMode) {
                 editLayoutBtn.setText("💾 Simpan");
                 editLayoutBtn.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF4CAF50));
@@ -151,6 +153,10 @@ public class MainActivity extends AppCompatActivity {
                 exportLayoutBtn.setVisibility(View.VISIBLE);
                 importLayoutBtn.setVisibility(View.VISIBLE);
                 statusText.setText("MODE EDIT: Geser tombol");
+                
+                // PERBAIKAN 1: Matikan slider agar bisa digeser posisinya
+                sbL2.setEnabled(false);
+                sbR2.setEnabled(false);
             } else {
                 editLayoutBtn.setText("⚙️ Edit");
                 editLayoutBtn.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFFFF9800));
@@ -159,6 +165,10 @@ public class MainActivity extends AppCompatActivity {
                 importLayoutBtn.setVisibility(View.GONE);
                 statusText.setText("Tata letak disimpan!");
                 saveLayout();
+                
+                // Nyalakan kembali slider
+                sbL2.setEnabled(true);
+                sbR2.setEnabled(true);
             }
         });
 
@@ -188,9 +198,8 @@ public class MainActivity extends AppCompatActivity {
         startSendLoop();
     }
 
-    // ================= SLIDER TRIGGER (VERTIKAL) =================
+    // ================= SLIDER TRIGGER (SPRING-LOADED) =================
 
-    // PERBAIKAN: Tambahkan parameter containerId
     private void setupTriggerSlider(int seekBarId, int containerId, boolean isL2) {
         SeekBar sb = findViewById(seekBarId);
         View container = findViewById(containerId);
@@ -209,13 +218,23 @@ public class MainActivity extends AppCompatActivity {
 
             @Override 
             public void onStopTrackingTouch(SeekBar seekBar) {
-                if (isEditMode) return;
-                // Kembalikan ke 0 (pegas)
-                seekBar.setProgress(0); 
+                // Animasi dijalankan lewat onTouch untuk memastikan rotasi berfungsi
             }
         });
 
-        // Agar wadah slider bisa digeser (drag) saat Mode Edit
+        // PERBAIKAN 2: Deteksi jari lepas secara manual dan animasikan kembali ke 0
+        sb.setOnTouchListener((v, event) -> {
+            if (isEditMode) return false; // Biarkan container yang menangani
+            
+            if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                // Animasi meluncur kembali ke 0 dalam 150ms
+                ObjectAnimator animator = ObjectAnimator.ofInt(sb, "progress", sb.getProgress(), 0);
+                animator.setDuration(150);
+                animator.start();
+            }
+            return false; // Biarkan SeekBar memproses sentuhannya
+        });
+
         applyEditTouchOnly(container);
     }
 
