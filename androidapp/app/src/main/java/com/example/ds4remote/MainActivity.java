@@ -40,7 +40,6 @@ public class MainActivity extends AppCompatActivity {
     private boolean isEditMode = false;
     private SharedPreferences prefs;
 
-    // State Gamepad
     private volatile int buttons = 0;
     private volatile int lx = 128, ly = 128, rx = 128, ry = 128;
     private volatile int l2 = 0, r2 = 0;
@@ -67,7 +66,6 @@ public class MainActivity extends AppCompatActivity {
         gamepadArea = findViewById(R.id.gamepadArea);
         statusIcon = findViewById(R.id.statusIcon);
 
-        // Buka halaman Pengaturan
         findViewById(R.id.btnOpenSettings).setOnClickListener(v -> {
             startActivity(new Intent(MainActivity.this, SettingsActivity.class));
         });
@@ -89,7 +87,6 @@ public class MainActivity extends AppCompatActivity {
         applyEditTouchOnly(leftStick);
         applyEditTouchOnly(rightStick);
 
-        // Setup Tombol
         setupButton(R.id.btnA, BTN_CROSS);
         setupButton(R.id.btnB, BTN_CIRCLE);
         setupButton(R.id.btnX, BTN_SQUARE);
@@ -103,20 +100,15 @@ public class MainActivity extends AppCompatActivity {
         setupButton(R.id.btnPS, BTN_PS);
         setupButton(R.id.btnTouchpad, BTN_TOUCHPAD);
 
-        // Setup Slider Vertikal
         setupTriggerSlider(R.id.btnL2, R.id.containerL2, true);
         setupTriggerSlider(R.id.btnR2, R.id.containerR2, false);
 
-        // Setup D-Pad
         setupDpad(R.id.dpadUp, 0);
         setupDpad(R.id.dpadRight, 2);
         setupDpad(R.id.dpadDown, 4);
         setupDpad(R.id.dpadLeft, 6);
 
-        // Load layout setelah UI siap
         gamepadArea.post(this::loadLayout);
-        
-        // Mulai pengiriman data via TCP
         startSendLoop();
     }
 
@@ -124,14 +116,12 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         
-        // 1. Update Ikon Koneksi Wi-Fi
         if (ConnectionManager.getInstance().isConnected()) {
             statusIcon.setImageResource(R.drawable.ic_wifi_on);
         } else {
             statusIcon.setImageResource(R.drawable.ic_wifi_off);
         }
 
-        // 2. Sinkronisasi Mode Edit dari SettingsActivity
         boolean editModeFromSettings = prefs.getBoolean("isEditMode", false);
         SeekBar sbL2 = findViewById(R.id.btnL2);
         SeekBar sbR2 = findViewById(R.id.btnR2);
@@ -140,21 +130,18 @@ public class MainActivity extends AppCompatActivity {
             isEditMode = editModeFromSettings;
             if (isEditMode) {
                 Toast.makeText(this, "Mode Edit AKTIF. Geser tombol, lalu simpan di Pengaturan.", Toast.LENGTH_SHORT).show();
-                sbL2.setEnabled(false); // Matikan slider agar bisa digeser posisinya
+                sbL2.setEnabled(false);
                 sbR2.setEnabled(false);
             } else {
                 Toast.makeText(this, "Tata letak disimpan!", Toast.LENGTH_SHORT).show();
                 saveLayout();
-                sbL2.setEnabled(true); // Nyalakan kembali slider
+                sbL2.setEnabled(true);
                 sbR2.setEnabled(true);
             }
         } else if (!isEditMode) {
-            // 3. Muat ulang layout jika tidak sedang edit (misal setelah Import dari Settings)
             loadLayout(); 
         }
     }
-
-    // ================= SLIDER TRIGGER (SPRING-LOADED) =================
 
     private void setupTriggerSlider(int seekBarId, int containerId, boolean isL2) {
         SeekBar sb = findViewById(seekBarId);
@@ -174,7 +161,6 @@ public class MainActivity extends AppCompatActivity {
         sb.setOnTouchListener((v, event) -> {
             if (isEditMode) return false;
             if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
-                // Animasi meluncur kembali ke posisi 0 (pegas)
                 ObjectAnimator animator = ObjectAnimator.ofInt(sb, "progress", sb.getProgress(), 0);
                 animator.setDuration(150);
                 animator.start();
@@ -185,7 +171,6 @@ public class MainActivity extends AppCompatActivity {
         applyEditTouchOnly(container);
     }
 
-    // ================= PENGIRIMAN DATA TCP =================
     private void startSendLoop() {
         new Thread(() -> {
             while (isSending.get()) {
@@ -222,7 +207,6 @@ public class MainActivity extends AppCompatActivity {
         out.write(p);
     }
 
-    // ================= HANDLER TOMBOL & EDIT MODE =================
     private static int clamp255(float v) { return (int) Math.max(0, Math.min(255, v)); }
 
     private void setupButton(int id, int bitIdx) {
@@ -282,7 +266,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // ================= SIMPAN & MUAT LAYOUT =================
     private void loadLayout() {
         boolean loaded = false;
         for (int id : allIds) {
@@ -351,6 +334,5 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // isSending dibiarkan true agar koneksi tetap hidup di ConnectionManager saat rotasi layar
     }
 }
