@@ -22,7 +22,7 @@
             </intent-filter>
         </activity>
 
-        <!-- PERBAIKAN: Daftarkan SettingsActivity di sini -->
+        <!-- Halaman Pengaturan -->
         <activity
             android:name=".SettingsActivity"
             android:exported="false"

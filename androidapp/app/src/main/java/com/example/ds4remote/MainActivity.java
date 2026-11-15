@@ -34,7 +34,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int PACKET_SIZE = 12;
     private static final int SEND_INTERVAL_MS = 16;
 
-    private ImageView statusIcon, btnOpenSettings;
+    private ImageView statusIcon;
     private FrameLayout gamepadArea;
 
     private final AtomicBoolean isSending = new AtomicBoolean(true);
@@ -60,6 +60,15 @@ public class MainActivity extends AppCompatActivity {
         R.id.btnL3, R.id.btnTouchpad, R.id.btnR3
     };
 
+    private final ActivityResultLauncher<Intent> exportLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+                    writeLayoutToUri(result.getData().getData());
+                }
+            }
+    );
+
     private final ActivityResultLauncher<String[]> importLauncher = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(),
             uri -> {
@@ -77,9 +86,8 @@ public class MainActivity extends AppCompatActivity {
         prefs = getSharedPreferences("GamepadLayout", MODE_PRIVATE);
         gamepadArea = findViewById(R.id.gamepadArea);
         statusIcon = findViewById(R.id.statusIcon);
-        btnOpenSettings = findViewById(R.id.btnOpenSettings);
 
-        btnOpenSettings.setOnClickListener(v -> {
+        findViewById(R.id.btnOpenSettings).setOnClickListener(v -> {
             startActivity(new Intent(MainActivity.this, SettingsActivity.class));
         });
 
@@ -128,34 +136,44 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        updateStatusIcon();
-        // Jika baru balik dari Settings setelah Reset, muat ulang layout
+        
+        // Update Ikon Koneksi
         if (ConnectionManager.getInstance().isConnected()) {
             statusIcon.setImageResource(R.drawable.ic_wifi_on);
         } else {
             statusIcon.setImageResource(R.drawable.ic_wifi_off);
         }
-    }
 
-    private void updateStatusIcon() {
-        if (ConnectionManager.getInstance().isConnected()) {
-            statusIcon.setImageResource(R.drawable.ic_wifi_on);
-        } else {
-            statusIcon.setImageResource(R.drawable.ic_wifi_off);
+        // Cek Mode Edit dari Settings
+        boolean editModeFromSettings = prefs.getBoolean("isEditMode", false);
+        SeekBar sbL2 = findViewById(R.id.btnL2);
+        SeekBar sbR2 = findViewById(R.id.btnR2);
+
+        if (editModeFromSettings != isEditMode) {
+            isEditMode = editModeFromSettings;
+            if (isEditMode) {
+                Toast.makeText(this, "Mode Edit AKTIF. Geser tombol.", Toast.LENGTH_SHORT).show();
+                sbL2.setEnabled(false); // Matikan slider agar bisa digeser
+                sbR2.setEnabled(false);
+            } else {
+                Toast.makeText(this, "Tata letak disimpan!", Toast.LENGTH_SHORT).show();
+                saveLayout();
+                sbL2.setEnabled(true); // Nyalakan kembali slider
+                sbR2.setEnabled(true);
+            }
         }
     }
 
     private void setupTriggerSlider(int seekBarId, int containerId, boolean isL2) {
         SeekBar sb = findViewById(seekBarId);
         View container = findViewById(containerId);
-        
+
         sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 if (isEditMode) return;
                 int val = (int) ((progress / 100.0) * 255);
-                if (isL2) l2 = val;
-                else r2 = val;
+                if (isL2) l2 = val; else r2 = val;
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
@@ -178,11 +196,11 @@ public class MainActivity extends AppCompatActivity {
         new Thread(() -> {
             while (isSending.get()) {
                 if (ConnectionManager.getInstance().isConnected()) {
-                    try { 
-                        sendPacket(); 
-                    } catch (IOException ex) { 
-                        ConnectionManager.getInstance().disconnect(); 
-                        uiHandler.post(this::updateStatusIcon);
+                    try {
+                        sendPacket();
+                    } catch (IOException ex) {
+                        ConnectionManager.getInstance().disconnect();
+                        uiHandler.post(() -> statusIcon.setImageResource(R.drawable.ic_wifi_off));
                     }
                 }
                 try { Thread.sleep(SEND_INTERVAL_MS); } catch (InterruptedException e) { return; }
@@ -193,7 +211,7 @@ public class MainActivity extends AppCompatActivity {
     private void sendPacket() throws IOException {
         OutputStream out = ConnectionManager.getInstance().getOutput();
         if (out == null) return;
-        
+
         byte[] p = new byte[PACKET_SIZE];
         p[0] = SYNC;
         p[1] = (byte)(buttons & 0xFF);
@@ -206,19 +224,16 @@ public class MainActivity extends AppCompatActivity {
         byte ck = 0;
         for (int i = 1; i < PACKET_SIZE - 1; i++) ck ^= p[i];
         p[PACKET_SIZE - 1] = ck;
-        
         out.write(p);
     }
 
-    // --- Sisa fungsi UI (Button, Dpad, Edit, Save/Load) sama seperti sebelumnya ---
-    // (Copy semua fungsi setupButton, setupDpad, applyEdit..., loadLayout, saveLayout, dll di sini)
-    
     private static int clamp255(float v) { return (int) Math.max(0, Math.min(255, v)); }
 
     private void setupButton(int id, int bitIdx) {
         Button b = findViewById(id);
         applyEditAndGamepadTouch(b, () -> { if (!isEditMode) buttons |= (1 << bitIdx); }, () -> { if (!isEditMode) buttons &= ~(1 << bitIdx); });
     }
+
     private void setupDpad(int id, int dpadValue) {
         View b = findViewById(id);
         applyEditAndGamepadTouch(b, () -> { if (!isEditMode) dpad = dpadValue; }, () -> { if (!isEditMode) dpad = 8; });
@@ -323,7 +338,45 @@ public class MainActivity extends AppCompatActivity {
         child.setY(Math.max(0, Math.min(y, gamepadArea.getHeight() - h)));
     }
 
-    private void resetLayout() { prefs.edit().clear().apply(); loadDefaultFromJson(); }
+    private void saveLayout() {
+        SharedPreferences.Editor editor = prefs.edit();
+        for (int id : allIds) {
+            View child = findViewById(id);
+            if (child != null) {
+                String idName = getResources().getResourceEntryName(id);
+                editor.putFloat(idName + "_x", child.getX()); editor.putFloat(idName + "_y", child.getY());
+                editor.putInt(idName + "_w", child.getWidth()); editor.putInt(idName + "_h", child.getHeight());
+            }
+        }
+        editor.apply();
+    }
+
+    private void writeLayoutToUri(Uri uri) {
+        try {
+            JSONObject obj = new JSONObject();
+            float density = getResources().getDisplayMetrics().density;
+
+            for (int id : allIds) {
+                View child = findViewById(id);
+                if (child != null) {
+                    String idName = getResources().getResourceEntryName(id);
+                    JSONObject props = new JSONObject();
+                    props.put("x", Math.round(child.getX() / density));
+                    props.put("y", Math.round(child.getY() / density));
+                    props.put("w", Math.round(child.getWidth() / density));
+                    props.put("h", Math.round(child.getHeight() / density));
+                    obj.put(idName, props);
+                }
+            }
+
+            OutputStream os = getContentResolver().openOutputStream(uri);
+            if (os != null) {
+                os.write(obj.toString(4).getBytes(StandardCharsets.UTF_8));
+                os.close();
+                Toast.makeText(this, "Export berhasil!", Toast.LENGTH_LONG).show();
+            }
+        } catch (Exception e) { e.printStackTrace(); }
+    }
 
     private void readLayoutFromUri(Uri uri) {
         try {
@@ -334,22 +387,10 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) { e.printStackTrace(); }
     }
 
-    // Pastikan Anda memindahkan fungsi writeLayoutToUri, exportLauncher, dll ke sini jika belum.
-    // Karena kita memindahkan tombol Export ke Settings, Anda bisa membuat logika export di MainActivity dan memanggilnya lewat Intent.
-    // Namun untuk kesederhanaan, UI Settings saat ini menyarankan export via mode Edit di MainActivity.
-
-    // Jangan lupa tambahkan logika untuk mendeteksi "Mode Edit" dari Settings.
-    // Karena kita mengubah cara kerja, kita bisa membaca flag dari SharedPreferences.
     @Override
-    protected void onStart() {
-        super.onStart();
-        // Baca apakah user baru saja menekan tombol Edit di Settings
-        isEditMode = prefs.getBoolean("isEditMode", false);
-        if (isEditMode) {
-            Toast.makeText(this, "Mode Edit: Geser tombol, lalu klik ikon Gear untuk simpan", Toast.LENGTH_LONG).show();
-        }
+    protected void onDestroy() {
+        super.onDestroy();
+        // Aplikasi ditutup, tetapi koneksi tetap hidup di ConnectionManager agar tidak terputus
+        // saat rotasi layar atau pindah activity.
     }
-
-    // Fungsi untuk menyimpan layout saat keluar dari mode edit
-    // Bisa dipanggil saat user kembali ke Settings
 }

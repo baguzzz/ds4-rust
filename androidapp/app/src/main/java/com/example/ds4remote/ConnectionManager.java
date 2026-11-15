@@ -22,7 +22,7 @@ public class ConnectionManager {
     public OutputStream getOutput() { return output; }
 
     public void connect(String ip) throws IOException {
-        disconnect(); // Tutup koneksi lama jika ada
+        disconnect();
         Socket newSocket = new Socket();
         newSocket.connect(new InetSocketAddress(ip, 27020), 3000);
         newSocket.setTcpNoDelay(true);

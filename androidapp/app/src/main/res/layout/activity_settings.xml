@@ -3,22 +3,21 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="24dp"
+    android:padding="32dp"
     android:background="#101114"
     android:gravity="center_horizontal">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Pengaturan"
-        android:textColor="#C5C8CC"
-        android:textSize="24sp"
+        android:text="PENGATURAN"
+        android:textColor="#66C0F4"
+        android:textSize="28sp"
         android:textStyle="bold"
         android:layout_marginBottom="32dp"/>
 
-    <!-- SEKSI KONEKSI -->
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Koneksi ke PC" android:textColor="#888" android:textStyle="bold" android:layout_marginBottom="8dp"/>
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginBottom="16dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginBottom="32dp">
         <EditText
             android:id="@+id/ipInput"
             android:layout_width="0dp"
@@ -40,14 +39,13 @@
             android:textColor="#FFF"/>
     </LinearLayout>
 
-    <!-- SEKSI LAYOUT -->
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Tata Letak Controller" android:textColor="#888" android:textStyle="bold" android:layout_marginTop="16dp" android:layout_marginBottom="8dp"/>
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Tata Letak Controller" android:textColor="#888" android:textStyle="bold" android:layout_marginBottom="8dp"/>
     
     <Button
         android:id="@+id/btnToggleEdit"
         android:layout_width="match_parent"
         android:layout_height="50dp"
-        android:text="Aktifkan Mode Edit"
+        android:text="Aktifkan Mode Edit (Geser Tombol)"
         android:backgroundTint="#FF9800"
         android:textColor="#000"
         android:layout_marginBottom="8dp"/>
