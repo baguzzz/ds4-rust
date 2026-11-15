@@ -122,6 +122,14 @@ public class MainActivity extends AppCompatActivity {
             statusIcon.setImageResource(R.drawable.ic_wifi_off);
         }
 
+        // Cek jika user baru saja melakukan Import dari Settings
+        boolean forceLoad = prefs.getBoolean("forceLoadLayout", false);
+        if (forceLoad) {
+            prefs.edit().putBoolean("forceLoadLayout", false).apply();
+            loadLayout(); // Muat layout hasil import
+            return;
+        }
+
         boolean editModeFromSettings = prefs.getBoolean("isEditMode", false);
         SeekBar sbL2 = findViewById(R.id.btnL2);
         SeekBar sbR2 = findViewById(R.id.btnR2);
@@ -129,7 +137,7 @@ public class MainActivity extends AppCompatActivity {
         if (editModeFromSettings != isEditMode) {
             isEditMode = editModeFromSettings;
             if (isEditMode) {
-                Toast.makeText(this, "Mode Edit AKTIF. Geser tombol, lalu simpan di Pengaturan.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Mode Edit AKTIF. Geser tombol.", Toast.LENGTH_SHORT).show();
                 sbL2.setEnabled(false);
                 sbR2.setEnabled(false);
             } else {
@@ -138,9 +146,14 @@ public class MainActivity extends AppCompatActivity {
                 sbL2.setEnabled(true);
                 sbR2.setEnabled(true);
             }
-        } else if (!isEditMode) {
-            loadLayout(); 
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // PERBAIKAN 1: Matikan thread untuk mencegah Memory Leak
+        isSending.set(false);
     }
 
     private void setupTriggerSlider(int seekBarId, int containerId, boolean isL2) {
@@ -203,7 +216,6 @@ public class MainActivity extends AppCompatActivity {
         byte ck = 0;
         for (int i = 1; i < PACKET_SIZE - 1; i++) ck ^= p[i];
         p[PACKET_SIZE - 1] = ck;
-        
         out.write(p);
     }
 
@@ -285,7 +297,8 @@ public class MainActivity extends AppCompatActivity {
         try {
             InputStream is = getAssets().open("layout_default.json");
             byte[] buffer = new byte[is.available()]; is.read(buffer); is.close();
-            applyJsonLayout(new String(buffer, StandardCharsets.UTF_8), false);
+            // PERBAIKAN 2: Simpan ke prefs (true) agar file bisa di-Export
+            applyJsonLayout(new String(buffer, StandardCharsets.UTF_8), true); 
         } catch (Exception e) { e.printStackTrace(); }
     }
 
@@ -329,10 +342,5 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         editor.apply();
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
     }
 }

@@ -29,7 +29,6 @@ public class SettingsActivity extends AppCompatActivity {
     private SharedPreferences prefs;
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
 
-    // Launcher untuk Export
     private final ActivityResultLauncher<Intent> exportLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
             result -> {
@@ -39,7 +38,6 @@ public class SettingsActivity extends AppCompatActivity {
             }
     );
 
-    // Launcher untuk Import
     private final ActivityResultLauncher<String[]> importLauncher = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(),
             uri -> {
@@ -61,7 +59,6 @@ public class SettingsActivity extends AppCompatActivity {
         ipInput.setText(prefs.getString("last_ip", "192.168.1.10"));
         updateConnectionUI();
 
-        // --- LOGIKA CONNECT ---
         connectBtn.setOnClickListener(v -> {
             if (ConnectionManager.getInstance().isConnected()) {
                 ConnectionManager.getInstance().disconnect();
@@ -87,22 +84,19 @@ public class SettingsActivity extends AppCompatActivity {
             }
         });
 
-        // --- LOGIKA EDIT MODE ---
         Button btnToggleEdit = findViewById(R.id.btnToggleEdit);
         btnToggleEdit.setOnClickListener(v -> {
             boolean isCurrentlyEdit = prefs.getBoolean("isEditMode", false);
             prefs.edit().putBoolean("isEditMode", !isCurrentlyEdit).apply();
-            finish(); // Kembali ke controller
-        });
-
-        // --- LOGIKA RESET ---
-        findViewById(R.id.btnResetLayout).setOnClickListener(v -> {
-            prefs.edit().clear().apply();
-            Toast.makeText(this, "Tata letak di-reset ke default!", Toast.LENGTH_SHORT).show();
             finish();
         });
 
-        // --- LOGIKA EXPORT (SAVE) ---
+        findViewById(R.id.btnResetLayout).setOnClickListener(v -> {
+            prefs.edit().clear().apply();
+            Toast.makeText(this, "Tata letak di-reset!", Toast.LENGTH_SHORT).show();
+            finish();
+        });
+
         findViewById(R.id.btnExportLayout).setOnClickListener(v -> {
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -111,7 +105,6 @@ public class SettingsActivity extends AppCompatActivity {
             exportLauncher.launch(intent);
         });
 
-        // --- LOGIKA IMPORT (LOAD) ---
         findViewById(R.id.btnImportLayout).setOnClickListener(v -> {
             importLauncher.launch(new String[]{"application/json", "text/plain", "*/*"});
         });
@@ -127,25 +120,18 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
-    // ================= FUNGSI EXPORT & IMPORT =================
-
     private void exportLayout(Uri uri) {
         try {
             JSONObject obj = new JSONObject();
             float density = getResources().getDisplayMetrics().density;
             Map<String, ?> allEntries = prefs.getAll();
 
-            // Membaca semua koordinat dari SharedPreferences
             for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
                 String key = entry.getKey();
                 if (key.endsWith("_x")) {
                     String idName = key.substring(0, key.length() - 2);
-                    if (allEntries.containsKey(idName + "_y") &&
-                        allEntries.containsKey(idName + "_w") &&
-                        allEntries.containsKey(idName + "_h")) {
-
+                    if (allEntries.containsKey(idName + "_y") && allEntries.containsKey(idName + "_w") && allEntries.containsKey(idName + "_h")) {
                         JSONObject props = new JSONObject();
-                        // Konversi pixel kembali ke dp
                         props.put("x", Math.round((Float)entry.getValue() / density));
                         props.put("y", Math.round((Float)allEntries.get(idName + "_y") / density));
                         props.put("w", Math.round((Integer)allEntries.get(idName + "_w") / density));
@@ -180,24 +166,22 @@ public class SettingsActivity extends AppCompatActivity {
             float density = getResources().getDisplayMetrics().density;
             SharedPreferences.Editor editor = prefs.edit();
 
-            // Simpan koordinat baru ke SharedPreferences
             for (java.util.Iterator<String> it = obj.keys(); it.hasNext(); ) {
                 String idName = it.next();
                 JSONObject props = obj.getJSONObject(idName);
-                float x = (float) props.getDouble("x") * density;
-                float y = (float) props.getDouble("y") * density;
-                int w = (int) (props.getInt("w") * density);
-                int h = (int) (props.getInt("h") * density);
-
-                editor.putFloat(idName + "_x", x);
-                editor.putFloat(idName + "_y", y);
-                editor.putInt(idName + "_w", w);
-                editor.putInt(idName + "_h", h);
+                editor.putFloat(idName + "_x", (float) props.getDouble("x") * density);
+                editor.putFloat(idName + "_y", (float) props.getDouble("y") * density);
+                editor.putInt(idName + "_w", (int) (props.getInt("w") * density));
+                editor.putInt(idName + "_h", (int) (props.getInt("h") * density));
             }
+            
+            // PERBAIKAN 3: Matikan edit mode & beri sinyal ke MainActivity untuk memuat ulang layout
+            editor.putBoolean("isEditMode", false);
+            editor.putBoolean("forceLoadLayout", true);
             editor.apply();
 
-            Toast.makeText(this, "Import berhasil! Kembali ke controller.", Toast.LENGTH_SHORT).show();
-            finish(); // Kembali ke MainActivity untuk menerapkan layout
+            Toast.makeText(this, "Import berhasil!", Toast.LENGTH_SHORT).show();
+            finish(); 
         } catch (Exception e) {
             e.printStackTrace();
             Toast.makeText(this, "Gagal import: " + e.getMessage(), Toast.LENGTH_SHORT).show();
