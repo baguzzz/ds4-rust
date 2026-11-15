@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="#101114"
+    android:gravity="center_horizontal">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Pengaturan"
+        android:textColor="#C5C8CC"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="32dp"/>
+
+    <!-- SEKSI KONEKSI -->
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Koneksi ke PC" android:textColor="#888" android:textStyle="bold" android:layout_marginBottom="8dp"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginBottom="16dp">
+        <EditText
+            android:id="@+id/ipInput"
+            android:layout_width="0dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:hint="192.168.1.10"
+            android:textColorHint="#555"
+            android:textColor="#FFF"
+            android:inputType="text"
+            android:background="#1A1C21"
+            android:padding="12dp"/>
+        <Button
+            android:id="@+id/connectBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="50dp"
+            android:text="CONNECT"
+            android:layout_marginStart="8dp"
+            android:backgroundTint="#4CAF50"
+            android:textColor="#FFF"/>
+    </LinearLayout>
+
+    <!-- SEKSI LAYOUT -->
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Tata Letak Controller" android:textColor="#888" android:textStyle="bold" android:layout_marginTop="16dp" android:layout_marginBottom="8dp"/>
+    
+    <Button
+        android:id="@+id/btnToggleEdit"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:text="Aktifkan Mode Edit"
+        android:backgroundTint="#FF9800"
+        android:textColor="#000"
+        android:layout_marginBottom="8dp"/>
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+        <Button
+            android:id="@+id/btnResetLayout"
+            android:layout_width="0dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:text="RESET"
+            android:backgroundTint="#F44336"
+            android:textColor="#FFF"
+            android:layout_marginEnd="4dp"/>
+        <Button
+            android:id="@+id/btnExportLayout"
+            android:layout_width="0dp"
+            android:layout_height="50dp"
+            android:layout_weight="1"
+            android:text="SAVE"
+            android:backgroundTint="#2196F3"
+            android:textColor="#FFF"
+            android:layout_marginStart="4dp"/>
+    </LinearLayout>
+
+</LinearLayout>
