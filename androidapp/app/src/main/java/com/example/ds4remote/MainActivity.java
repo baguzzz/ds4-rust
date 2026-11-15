@@ -3,7 +3,6 @@ package com.example.ds4remote;
 import android.animation.ObjectAnimator;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -16,8 +15,6 @@ import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.Toast;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 
 import org.json.JSONObject;
@@ -43,6 +40,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean isEditMode = false;
     private SharedPreferences prefs;
 
+    // State Gamepad
     private volatile int buttons = 0;
     private volatile int lx = 128, ly = 128, rx = 128, ry = 128;
     private volatile int l2 = 0, r2 = 0;
@@ -60,24 +58,6 @@ public class MainActivity extends AppCompatActivity {
         R.id.btnL3, R.id.btnTouchpad, R.id.btnR3
     };
 
-    private final ActivityResultLauncher<Intent> exportLauncher = registerForActivityResult(
-            new ActivityResultContracts.StartActivityForResult(),
-            result -> {
-                if (result.getResultCode() == RESULT_OK && result.getData() != null) {
-                    writeLayoutToUri(result.getData().getData());
-                }
-            }
-    );
-
-    private final ActivityResultLauncher<String[]> importLauncher = registerForActivityResult(
-            new ActivityResultContracts.OpenDocument(),
-            uri -> {
-                if (uri != null) {
-                    readLayoutFromUri(uri);
-                }
-            }
-    );
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -87,6 +67,7 @@ public class MainActivity extends AppCompatActivity {
         gamepadArea = findViewById(R.id.gamepadArea);
         statusIcon = findViewById(R.id.statusIcon);
 
+        // Buka halaman Pengaturan
         findViewById(R.id.btnOpenSettings).setOnClickListener(v -> {
             startActivity(new Intent(MainActivity.this, SettingsActivity.class));
         });
@@ -108,6 +89,7 @@ public class MainActivity extends AppCompatActivity {
         applyEditTouchOnly(leftStick);
         applyEditTouchOnly(rightStick);
 
+        // Setup Tombol
         setupButton(R.id.btnA, BTN_CROSS);
         setupButton(R.id.btnB, BTN_CIRCLE);
         setupButton(R.id.btnX, BTN_SQUARE);
@@ -121,15 +103,20 @@ public class MainActivity extends AppCompatActivity {
         setupButton(R.id.btnPS, BTN_PS);
         setupButton(R.id.btnTouchpad, BTN_TOUCHPAD);
 
+        // Setup Slider Vertikal
         setupTriggerSlider(R.id.btnL2, R.id.containerL2, true);
         setupTriggerSlider(R.id.btnR2, R.id.containerR2, false);
 
+        // Setup D-Pad
         setupDpad(R.id.dpadUp, 0);
         setupDpad(R.id.dpadRight, 2);
         setupDpad(R.id.dpadDown, 4);
         setupDpad(R.id.dpadLeft, 6);
 
+        // Load layout setelah UI siap
         gamepadArea.post(this::loadLayout);
+        
+        // Mulai pengiriman data via TCP
         startSendLoop();
     }
 
@@ -137,14 +124,14 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         
-        // Update Ikon Koneksi
+        // 1. Update Ikon Koneksi Wi-Fi
         if (ConnectionManager.getInstance().isConnected()) {
             statusIcon.setImageResource(R.drawable.ic_wifi_on);
         } else {
             statusIcon.setImageResource(R.drawable.ic_wifi_off);
         }
 
-        // Cek Mode Edit dari Settings
+        // 2. Sinkronisasi Mode Edit dari SettingsActivity
         boolean editModeFromSettings = prefs.getBoolean("isEditMode", false);
         SeekBar sbL2 = findViewById(R.id.btnL2);
         SeekBar sbR2 = findViewById(R.id.btnR2);
@@ -152,8 +139,8 @@ public class MainActivity extends AppCompatActivity {
         if (editModeFromSettings != isEditMode) {
             isEditMode = editModeFromSettings;
             if (isEditMode) {
-                Toast.makeText(this, "Mode Edit AKTIF. Geser tombol.", Toast.LENGTH_SHORT).show();
-                sbL2.setEnabled(false); // Matikan slider agar bisa digeser
+                Toast.makeText(this, "Mode Edit AKTIF. Geser tombol, lalu simpan di Pengaturan.", Toast.LENGTH_SHORT).show();
+                sbL2.setEnabled(false); // Matikan slider agar bisa digeser posisinya
                 sbR2.setEnabled(false);
             } else {
                 Toast.makeText(this, "Tata letak disimpan!", Toast.LENGTH_SHORT).show();
@@ -161,8 +148,13 @@ public class MainActivity extends AppCompatActivity {
                 sbL2.setEnabled(true); // Nyalakan kembali slider
                 sbR2.setEnabled(true);
             }
+        } else if (!isEditMode) {
+            // 3. Muat ulang layout jika tidak sedang edit (misal setelah Import dari Settings)
+            loadLayout(); 
         }
     }
+
+    // ================= SLIDER TRIGGER (SPRING-LOADED) =================
 
     private void setupTriggerSlider(int seekBarId, int containerId, boolean isL2) {
         SeekBar sb = findViewById(seekBarId);
@@ -182,6 +174,7 @@ public class MainActivity extends AppCompatActivity {
         sb.setOnTouchListener((v, event) -> {
             if (isEditMode) return false;
             if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                // Animasi meluncur kembali ke posisi 0 (pegas)
                 ObjectAnimator animator = ObjectAnimator.ofInt(sb, "progress", sb.getProgress(), 0);
                 animator.setDuration(150);
                 animator.start();
@@ -192,6 +185,7 @@ public class MainActivity extends AppCompatActivity {
         applyEditTouchOnly(container);
     }
 
+    // ================= PENGIRIMAN DATA TCP =================
     private void startSendLoop() {
         new Thread(() -> {
             while (isSending.get()) {
@@ -224,9 +218,11 @@ public class MainActivity extends AppCompatActivity {
         byte ck = 0;
         for (int i = 1; i < PACKET_SIZE - 1; i++) ck ^= p[i];
         p[PACKET_SIZE - 1] = ck;
+        
         out.write(p);
     }
 
+    // ================= HANDLER TOMBOL & EDIT MODE =================
     private static int clamp255(float v) { return (int) Math.max(0, Math.min(255, v)); }
 
     private void setupButton(int id, int bitIdx) {
@@ -286,6 +282,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    // ================= SIMPAN & MUAT LAYOUT =================
     private void loadLayout() {
         boolean loaded = false;
         for (int id : allIds) {
@@ -351,46 +348,9 @@ public class MainActivity extends AppCompatActivity {
         editor.apply();
     }
 
-    private void writeLayoutToUri(Uri uri) {
-        try {
-            JSONObject obj = new JSONObject();
-            float density = getResources().getDisplayMetrics().density;
-
-            for (int id : allIds) {
-                View child = findViewById(id);
-                if (child != null) {
-                    String idName = getResources().getResourceEntryName(id);
-                    JSONObject props = new JSONObject();
-                    props.put("x", Math.round(child.getX() / density));
-                    props.put("y", Math.round(child.getY() / density));
-                    props.put("w", Math.round(child.getWidth() / density));
-                    props.put("h", Math.round(child.getHeight() / density));
-                    obj.put(idName, props);
-                }
-            }
-
-            OutputStream os = getContentResolver().openOutputStream(uri);
-            if (os != null) {
-                os.write(obj.toString(4).getBytes(StandardCharsets.UTF_8));
-                os.close();
-                Toast.makeText(this, "Export berhasil!", Toast.LENGTH_LONG).show();
-            }
-        } catch (Exception e) { e.printStackTrace(); }
-    }
-
-    private void readLayoutFromUri(Uri uri) {
-        try {
-            InputStream is = getContentResolver().openInputStream(uri);
-            byte[] buffer = new byte[is.available()]; is.read(buffer); is.close();
-            applyJsonLayout(new String(buffer, StandardCharsets.UTF_8), true);
-            Toast.makeText(this, "Import layout berhasil!", Toast.LENGTH_SHORT).show();
-        } catch (Exception e) { e.printStackTrace(); }
-    }
-
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Aplikasi ditutup, tetapi koneksi tetap hidup di ConnectionManager agar tidak terputus
-        // saat rotasi layar atau pindah activity.
+        // isSending dibiarkan true agar koneksi tetap hidup di ConnectionManager saat rotasi layar
     }
 }

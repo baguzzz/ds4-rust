@@ -16,6 +16,7 @@
         android:textStyle="bold"
         android:layout_marginBottom="32dp"/>
 
+    <!-- SEKSI KONEKSI -->
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Koneksi ke PC" android:textColor="#888" android:textStyle="bold" android:layout_marginBottom="8dp"/>
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginBottom="32dp">
         <EditText
@@ -39,6 +40,7 @@
             android:textColor="#FFF"/>
     </LinearLayout>
 
+    <!-- SEKSI LAYOUT -->
     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Tata Letak Controller" android:textColor="#888" android:textStyle="bold" android:layout_marginBottom="8dp"/>
     
     <Button
@@ -48,9 +50,10 @@
         android:text="Aktifkan Mode Edit (Geser Tombol)"
         android:backgroundTint="#FF9800"
         android:textColor="#000"
-        android:layout_marginBottom="8dp"/>
+        android:layout_marginBottom="16dp"/>
 
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+    <!-- Baris Tombol Reset & Import -->
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginBottom="8dp">
         <Button
             android:id="@+id/btnResetLayout"
             android:layout_width="0dp"
@@ -61,14 +64,23 @@
             android:textColor="#FFF"
             android:layout_marginEnd="4dp"/>
         <Button
-            android:id="@+id/btnExportLayout"
+            android:id="@+id/btnImportLayout"
             android:layout_width="0dp"
             android:layout_height="50dp"
             android:layout_weight="1"
-            android:text="SAVE"
-            android:backgroundTint="#2196F3"
+            android:text="IMPORT (LOAD)"
+            android:backgroundTint="#9C27B0"
             android:textColor="#FFF"
             android:layout_marginStart="4dp"/>
     </LinearLayout>
+
+    <!-- Tombol Export -->
+    <Button
+        android:id="@+id/btnExportLayout"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:text="EXPORT (SAVE) LAYOUT"
+        android:backgroundTint="#2196F3"
+        android:textColor="#FFF"/>
 
 </LinearLayout>
