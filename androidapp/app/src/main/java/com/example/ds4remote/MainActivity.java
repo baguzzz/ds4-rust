@@ -122,11 +122,10 @@ public class MainActivity extends AppCompatActivity {
             statusIcon.setImageResource(R.drawable.ic_wifi_off);
         }
 
-        // Cek jika user baru saja melakukan Import dari Settings
         boolean forceLoad = prefs.getBoolean("forceLoadLayout", false);
         if (forceLoad) {
             prefs.edit().putBoolean("forceLoadLayout", false).apply();
-            loadLayout(); // Muat layout hasil import
+            loadLayout();
             return;
         }
 
@@ -152,7 +151,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // PERBAIKAN 1: Matikan thread untuk mencegah Memory Leak
         isSending.set(false);
     }
 
@@ -297,7 +295,6 @@ public class MainActivity extends AppCompatActivity {
         try {
             InputStream is = getAssets().open("layout_default.json");
             byte[] buffer = new byte[is.available()]; is.read(buffer); is.close();
-            // PERBAIKAN 2: Simpan ke prefs (true) agar file bisa di-Export
             applyJsonLayout(new String(buffer, StandardCharsets.UTF_8), true); 
         } catch (Exception e) { e.printStackTrace(); }
     }

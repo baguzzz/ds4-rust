@@ -21,9 +21,48 @@
             android:textStyle="bold"
             android:layout_marginBottom="24dp"/>
 
-        <!-- KONEKSI -->
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Koneksi ke PC" android:textColor="#888" android:textStyle="bold" android:layout_marginBottom="8dp"/>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginBottom="24dp">
+        <!-- SEKSI KONEKSI -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Koneksi ke PC"
+            android:textColor="#888"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"/>
+        
+        <!-- Pilihan Wi-Fi atau Bluetooth -->
+        <RadioGroup
+            android:id="@+id/connectionTypeGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+            
+            <RadioButton
+                android:id="@+id/rbWifi"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Wi-Fi (TCP)"
+                android:textColor="#FFF"
+                android:checked="true"
+                android:layout_marginEnd="24dp"/>
+                
+            <RadioButton
+                android:id="@+id/rbBluetooth"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Bluetooth"
+                android:textColor="#FFF"/>
+        </RadioGroup>
+
+        <!-- LAYOUT UNTUK WI-FI -->
+        <LinearLayout
+            android:id="@+id/wifiLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="24dp">
+            
             <EditText
                 android:id="@+id/ipInput"
                 android:layout_width="0dp"
@@ -35,30 +74,69 @@
                 android:inputType="text"
                 android:background="#1A1C21"
                 android:padding="12dp"/>
+        </LinearLayout>
+
+        <!-- LAYOUT UNTUK BLUETOOTH -->
+        <LinearLayout
+            android:id="@+id/btLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="24dp"
+            android:visibility="gone">
+            
+            <Spinner
+                android:id="@+id/btDeviceSpinner"
+                android:layout_width="0dp"
+                android:layout_height="50dp"
+                android:layout_weight="1"
+                android:background="#1A1C21"
+                android:padding="8dp"/>
+                
             <Button
-                android:id="@+id/connectBtn"
+                android:id="@+id/btnRefreshBt"
                 android:layout_width="wrap_content"
                 android:layout_height="50dp"
-                android:text="CONNECT"
+                android:text="Refresh"
                 android:layout_marginStart="8dp"
-                android:backgroundTint="#4CAF50"
+                android:backgroundTint="#2196F3"
                 android:textColor="#FFF"/>
         </LinearLayout>
 
-        <!-- EDIT MODE -->
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Tata Letak Controller" android:textColor="#888" android:textStyle="bold" android:layout_marginBottom="8dp"/>
-        
+        <!-- TOMBOL CONNECT / DISCONNECT -->
+        <Button
+            android:id="@+id/connectBtn"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:text="CONNECT"
+            android:backgroundTint="#4CAF50"
+            android:textColor="#FFF"
+            android:layout_marginBottom="32dp"/>
+
+        <!-- SEKSI LAYOUT -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tata Letak Controller"
+            android:textColor="#888"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"/>
+            
         <Button
             android:id="@+id/btnToggleEdit"
             android:layout_width="match_parent"
             android:layout_height="50dp"
-            android:text="Aktifkan Mode Edit (Geser Tombol)"
+            android:text="Aktifkan Mode Edit"
             android:backgroundTint="#FF9800"
             android:textColor="#000"
             android:layout_marginBottom="16dp"/>
 
-        <!-- RESET & IMPORT -->
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginBottom="8dp">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+            
             <Button
                 android:id="@+id/btnResetLayout"
                 android:layout_width="0dp"
@@ -68,26 +146,25 @@
                 android:backgroundTint="#F44336"
                 android:textColor="#FFF"
                 android:layout_marginEnd="4dp"/>
+                
             <Button
                 android:id="@+id/btnImportLayout"
                 android:layout_width="0dp"
                 android:layout_height="50dp"
                 android:layout_weight="1"
-                android:text="IMPORT (LOAD)"
+                android:text="IMPORT"
                 android:backgroundTint="#9C27B0"
                 android:textColor="#FFF"
                 android:layout_marginStart="4dp"/>
         </LinearLayout>
 
-        <!-- EXPORT -->
         <Button
             android:id="@+id/btnExportLayout"
             android:layout_width="match_parent"
             android:layout_height="50dp"
-            android:text="EXPORT (SAVE) LAYOUT"
+            android:text="EXPORT LAYOUT"
             android:backgroundTint="#2196F3"
             android:textColor="#FFF"
-            android:layout_marginBottom="32dp"/> <!-- Margin bawah agar tidak mepet saat di-scroll -->
-
+            android:layout_marginBottom="32dp"/>
     </LinearLayout>
 </ScrollView>
