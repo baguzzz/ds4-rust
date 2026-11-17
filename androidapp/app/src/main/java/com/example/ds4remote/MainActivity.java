@@ -189,6 +189,7 @@ public class MainActivity extends AppCompatActivity {
                     try {
                         sendPacket();
                     } catch (IOException ex) {
+                        // Hanya putuskan jika error benar-benar fatal
                         ConnectionManager.getInstance().disconnect();
                         uiHandler.post(() -> statusIcon.setImageResource(R.drawable.ic_wifi_off));
                     }
@@ -214,7 +215,9 @@ public class MainActivity extends AppCompatActivity {
         byte ck = 0;
         for (int i = 1; i < PACKET_SIZE - 1; i++) ck ^= p[i];
         p[PACKET_SIZE - 1] = ck;
+        
         out.write(p);
+        out.flush(); // PERBAIKAN: Paksa data langsung terkirim via Bluetooth
     }
 
     private static int clamp255(float v) { return (int) Math.max(0, Math.min(255, v)); }
