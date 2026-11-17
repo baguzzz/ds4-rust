@@ -1,0 +1,7 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="60dp" android:height="60dp" android:viewportWidth="100" android:viewportHeight="100">
+    <!-- Lingkaran Background -->
+    <path android:fillColor="#2C2C2C" android:strokeColor="#555555" android:strokeWidth="2" android:pathData="M50,50m-48,0a48,48 0,1 1,96 0a48,48 0,1 1,-96 0"/>
+    <!-- Simbol Segitiga -->
+    <path android:strokeColor="#00E5FF" android:strokeWidth="6" android:strokeLineJoin="round" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M50,28 L70,68 L30,68 Z"/>
+</vector>

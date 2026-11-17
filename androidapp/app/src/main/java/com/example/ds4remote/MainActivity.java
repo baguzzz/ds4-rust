@@ -189,7 +189,6 @@ public class MainActivity extends AppCompatActivity {
                     try {
                         sendPacket();
                     } catch (IOException ex) {
-                        // Hanya putuskan jika error benar-benar fatal
                         ConnectionManager.getInstance().disconnect();
                         uiHandler.post(() -> statusIcon.setImageResource(R.drawable.ic_wifi_off));
                     }
@@ -217,13 +216,13 @@ public class MainActivity extends AppCompatActivity {
         p[PACKET_SIZE - 1] = ck;
         
         out.write(p);
-        out.flush(); // PERBAIKAN: Paksa data langsung terkirim via Bluetooth
+        out.flush(); // Paksa data langsung terkirim (Bluetooth)
     }
 
     private static int clamp255(float v) { return (int) Math.max(0, Math.min(255, v)); }
 
     private void setupButton(int id, int bitIdx) {
-        Button b = findViewById(id);
+        View b = findViewById(id); // Menggunakan View agar mendukung ImageView (SVG)
         applyEditAndGamepadTouch(b, () -> { if (!isEditMode) buttons |= (1 << bitIdx); }, () -> { if (!isEditMode) buttons &= ~(1 << bitIdx); });
     }
 
