@@ -40,52 +40,60 @@ pub fn run_android_server(is_running: Arc<AtomicBool>) {
                 let _ = stream.set_nonblocking(false); 
                 
                 let mut buf = [0u8; 12];
+                let mut last_buf = [0u8; 12]; // Untuk deteksi perubahan
                 
                 while is_running.load(Ordering::Relaxed) {
                     match stream.read_exact(&mut buf) {
                         Ok(()) => {
                             if buf[0] == 0xAA {
-                                let buttons_mask = u16::from_le_bytes([buf[1], buf[2]]);
-                                let mut raw_buttons = 0u16;
-                                
-                                if (buttons_mask & 1) != 0 { raw_buttons |= XButtons::A; }
-                                if (buttons_mask & 2) != 0 { raw_buttons |= XButtons::B; }
-                                if (buttons_mask & 4) != 0 { raw_buttons |= XButtons::X; }
-                                if (buttons_mask & 8) != 0 { raw_buttons |= XButtons::Y; }
-                                if (buttons_mask & 16) != 0 { raw_buttons |= XButtons::LB; }
-                                if (buttons_mask & 32) != 0 { raw_buttons |= XButtons::RB; }
-                                if (buttons_mask & 64) != 0 { raw_buttons |= XButtons::BACK; }
-                                if (buttons_mask & 128) != 0 { raw_buttons |= XButtons::START; }
-                                if (buttons_mask & 256) != 0 { raw_buttons |= XButtons::LTHUMB; }
-                                if (buttons_mask & 512) != 0 { raw_buttons |= XButtons::RTHUMB; }
+                                // PERBAIKAN: Hanya update jika data berubah
+                                if buf != last_buf {
+                                    let buttons_mask = u16::from_le_bytes([buf[1], buf[2]]);
+                                    let mut raw_buttons = 0u16;
+                                    
+                                    if (buttons_mask & 1) != 0 { raw_buttons |= XButtons::A; }
+                                    if (buttons_mask & 2) != 0 { raw_buttons |= XButtons::B; }
+                                    if (buttons_mask & 4) != 0 { raw_buttons |= XButtons::X; }
+                                    if (buttons_mask & 8) != 0 { raw_buttons |= XButtons::Y; }
+                                    if (buttons_mask & 16) != 0 { raw_buttons |= XButtons::LB; }
+                                    if (buttons_mask & 32) != 0 { raw_buttons |= XButtons::RB; }
+                                    if (buttons_mask & 64) != 0 { raw_buttons |= XButtons::BACK; }
+                                    if (buttons_mask & 128) != 0 { raw_buttons |= XButtons::START; }
+                                    if (buttons_mask & 256) != 0 { raw_buttons |= XButtons::LTHUMB; }
+                                    if (buttons_mask & 512) != 0 { raw_buttons |= XButtons::RTHUMB; }
 
-                                let dpad = buf[9];
-                                if dpad == 0 || dpad == 1 || dpad == 7 { raw_buttons |= XButtons::UP; }
-                                if dpad == 2 || dpad == 1 || dpad == 3 { raw_buttons |= XButtons::RIGHT; }
-                                if dpad == 4 || dpad == 3 || dpad == 5 { raw_buttons |= XButtons::DOWN; }
-                                if dpad == 6 || dpad == 5 || dpad == 7 { raw_buttons |= XButtons::LEFT; }
+                                    let dpad = buf[9];
+                                    if dpad == 0 || dpad == 1 || dpad == 7 { raw_buttons |= XButtons::UP; }
+                                    if dpad == 2 || dpad == 1 || dpad == 3 { raw_buttons |= XButtons::RIGHT; }
+                                    if dpad == 4 || dpad == 3 || dpad == 5 { raw_buttons |= XButtons::DOWN; }
+                                    if dpad == 6 || dpad == 5 || dpad == 7 { raw_buttons |= XButtons::LEFT; }
 
-                                let buttons = XButtons { raw: raw_buttons };
-                                
-                                let lx_i32 = (buf[3] as i32 - 128) * 256;
-                                let rx_i32 = (buf[5] as i32 - 128) * 256;
-                                let ly_i32 = (128 - buf[4] as i32) * 256;
-                                let ry_i32 = (128 - buf[6] as i32) * 256;
+                                    let buttons = XButtons { raw: raw_buttons };
+                                    
+                                    let lx_i32 = (buf[3] as i32 - 128) * 256;
+                                    let rx_i32 = (buf[5] as i32 - 128) * 256;
+                                    let ly_i32 = (128 - buf[4] as i32) * 256;
+                                    let ry_i32 = (128 - buf[6] as i32) * 256;
 
-                                let gamepad = XGamepad {
-                                    buttons,
-                                    left_trigger: buf[7],
-                                    right_trigger: buf[8],
-                                    thumb_lx: lx_i32.clamp(-32768, 32767) as i16,
-                                    thumb_ly: ly_i32.clamp(-32768, 32767) as i16,
-                                    thumb_rx: rx_i32.clamp(-32768, 32767) as i16,
-                                    thumb_ry: ry_i32.clamp(-32768, 32767) as i16,
-                                };
-                                
-                                let _ = target.update(&gamepad);
+                                    let gamepad = XGamepad {
+                                        buttons,
+                                        left_trigger: buf[7],
+                                        right_trigger: buf[8],
+                                        thumb_lx: lx_i32.clamp(-32768, 32767) as i16,
+                                        thumb_ly: ly_i32.clamp(-32768, 32767) as i16,
+                                        thumb_rx: rx_i32.clamp(-32768, 32767) as i16,
+                                        thumb_ry: ry_i32.clamp(-32768, 32767) as i16,
+                                    };
+                                    
+                                    let _ = target.update(&gamepad);
+                                    last_buf.copy_from_slice(&buf); // Simpan data terakhir
+                                }
                             }
                         }
-                        Err(e) => { println!("Android memutus: {}", e); break; }
+                        Err(e) => { 
+                            println!("Android memutus: {}", e); 
+                            break; 
+                        }
                     }
                 }
             }
