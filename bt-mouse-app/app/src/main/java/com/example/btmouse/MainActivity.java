@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Method;
 import java.util.Set;
 import java.util.UUID;
 
@@ -77,49 +78,65 @@ public class MainActivity extends AppCompatActivity {
 
     @SuppressLint("MissingPermission")
     private void connectToPC() {
-        if (isConnected) return;
-
-        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) {
-            Toast.makeText(this, "Nyalakan Bluetooth", Toast.LENGTH_SHORT).show();
+        if (isConnected) {
+            Toast.makeText(this, "Sudah terhubung", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        // Mencari perangkat PC yang sudah di-pairing
+        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) {
+            Toast.makeText(this, "Nyalakan Bluetooth HP terlebih dahulu", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // 1. Ambil SEMUA perangkat yang sudah di-pairing
         Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
-        BluetoothDevice targetDevice = null;
+        if (pairedDevices.isEmpty()) {
+            Toast.makeText(this, "Tidak ada perangkat ter-pairing. Pairing HP ke PC dulu!", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        // Ambil perangkat pertama (asumsi PC adalah satu-satunya yang di-pairing)
+        BluetoothDevice targetDevice = pairedDevices.iterator().next();
         
-        // CARI NAMA PC ANDA DI SINI (Ubah "LAPTOP" atau "PC" sesuai nama Bluetooth komputer Anda)
+        // Opsional: Jika ada banyak, cari yang namanya cocok
         for (BluetoothDevice device : pairedDevices) {
-            String name = device.getName();
-            if (name != null && (name.contains("PC") || name.contains("LAPTOP") || name.contains("DESKTOP"))) {
+            if (device.getName() != null && device.getName().contains("ACER")) { // Ganti "ACER" dengan nama PC Anda
                 targetDevice = device;
                 break;
             }
         }
 
-        if (targetDevice == null) {
-            Toast.makeText(this, "Pairing HP ke PC dulu di Pengaturan Bluetooth!", Toast.LENGTH_LONG).show();
-            return;
-        }
-
         final BluetoothDevice finalDevice = targetDevice;
-        statusText.setText("Menghubungkan...");
+        statusText.setText("Menghubungkan ke " + finalDevice.getName() + "...");
 
+        // 2. Proses koneksi di Thread terpisah
         new Thread(() -> {
             try {
                 bluetoothAdapter.cancelDiscovery();
-                bluetoothSocket = finalDevice.createRfcommSocketToServiceRecord(MY_UUID);
-                bluetoothSocket.connect();
+                
+                // 3. TRIK REFLEKSI CHANNEL 1 (Kunci keberhasilan koneksi)
+                BluetoothSocket newSocket = null;
+                try {
+                    Method m = finalDevice.getClass().getMethod("createRfcommSocket", int.class);
+                    newSocket = (BluetoothSocket) m.invoke(finalDevice, 1);
+                } catch (Exception e) {
+                    // Jika refleksi gagal, fallback ke metode standar
+                    newSocket = finalDevice.createRfcommSocketToServiceRecord(MY_UUID);
+                }
+
+                newSocket.connect();
+                bluetoothSocket = newSocket;
                 outputStream = bluetoothSocket.getOutputStream();
                 isConnected = true;
+
                 runOnUiThread(() -> {
                     statusText.setText("✅ Terhubung ke " + finalDevice.getName());
                     statusText.setTextColor(0xFF4CAF50);
                 });
             } catch (IOException e) {
                 runOnUiThread(() -> {
-                    statusText.setText("❌ Gagal. Pastikan PC membuat Port COM Bluetooth.");
+                    statusText.setText("❌ Gagal Connect: " + e.getMessage());
                     statusText.setTextColor(0xFFF44336);
                 });
             }
@@ -139,7 +156,18 @@ public class MainActivity extends AppCompatActivity {
             outputStream.flush();
         } catch (IOException e) {
             isConnected = false;
-            runOnUiThread(() -> statusText.setText("Terputus"));
+            runOnUiThread(() -> {
+                statusText.setText("Terputus");
+                statusText.setTextColor(0xFFF44336);
+            });
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        try {
+            if (bluetoothSocket != null) bluetoothSocket.close();
+        } catch (IOException ignored) {}
     }
 }
