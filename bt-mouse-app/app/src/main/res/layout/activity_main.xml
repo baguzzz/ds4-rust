@@ -1,99 +1,117 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://android.com"
+<androidx.constraintlayout.widget.ConstraintLayout 
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="horizontal"
     android:background="#121212"
     android:fitsSystemWindows="true"
     android:padding="12dp">
 
-    <!-- Area Touchpad (Kiri) -->
+    <!-- Header Atas: Status Koneksi & Tombol Connect -->
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="Belum Terhubung"
+        android:textColor="#B0BEC5"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:gravity="center_vertical"
+        app:layout_constraintEnd_toStartOf="@+id/btnConnect"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnConnect"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:text="Connect"
+        android:textAllCaps="false"
+        android:textSize="13sp"
+        app:cornerRadius="8dp"
+        app:backgroundTint="#2196F3"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Area Touchpad Utama -->
     <com.example.btmouse.TouchpadView
         android:id="@+id/touchpad"
         android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1"
+        android:layout_height="0dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginEnd="12dp"
         android:background="#1E1E1E"
-        android:layout_marginEnd="12dp" />
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/buttonPanel"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/btnConnect" />
 
-    <!-- Panel Tombol (Kanan) -->
+    <!-- Panel Tombol Kendali Kanan -->
     <LinearLayout
-        android:layout_width="220dp"
-        android:layout_height="match_parent"
+        android:id="@+id/buttonPanel"
+        android:layout_width="160dp"
+        android:layout_height="0dp"
         android:orientation="vertical"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="8dp">
+        android:weightSum="4"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/touchpad">
 
-        <!-- Status Teks -->
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Belum Terhubung"
-            android:textColor="#F44336"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:gravity="center"
-            android:layout_marginBottom="12dp" />
-
-        <!-- Tombol Scroll Atas -->
-        <Button
+        <!-- Scroll Up -->
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnScrollUp"
             android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:text="SCROLL ▲"
-            android:backgroundTint="#333333"
-            android:textColor="#FFF" />
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginBottom="6dp"
+            android:text="▲ Scroll Up"
+            android:textAllCaps="false"
+            android:textSize="12sp"
+            app:cornerRadius="8dp"
+            app:backgroundTint="#333333" />
 
-        <!-- Tombol Klik Kiri & Kanan -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="10dp"
-            android:layout_marginBottom="10dp">
-
-            <Button
-                android:id="@+id/btnLeftClick"
-                android:layout_width="0dp"
-                android:layout_height="72dp"
-                android:layout_weight="1"
-                android:text="KIRI"
-                android:textStyle="bold"
-                android:backgroundTint="#4CAF50"
-                android:textColor="#FFF"
-                android:layout_marginEnd="8dp"/>
-
-            <Button
-                android:id="@+id/btnRightClick"
-                android:layout_width="0dp"
-                android:layout_height="72dp"
-                android:layout_weight="1"
-                android:text="KANAN"
-                android:textStyle="bold"
-                android:backgroundTint="#2196F3"
-                android:textColor="#FFF" />
-        </LinearLayout>
-
-        <!-- Tombol Scroll Bawah -->
-        <Button
+        <!-- Scroll Down -->
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnScrollDown"
             android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:text="SCROLL ▼"
-            android:backgroundTint="#333333"
-            android:textColor="#FFF" />
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginBottom="6dp"
+            android:text="▼ Scroll Down"
+            android:textAllCaps="false"
+            android:textSize="12sp"
+            app:cornerRadius="8dp"
+            app:backgroundTint="#333333" />
 
-        <!-- Tombol Connect / Pairing -->
-        <Button
-            android:id="@+id/btnConnect"
+        <!-- Klik Kiri -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnLeftClick"
             android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:text="PAIRING MODE"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginBottom="6dp"
+            android:text="Klik Kiri"
+            android:textAllCaps="false"
             android:textStyle="bold"
-            android:layout_marginTop="16dp"
-            android:backgroundTint="#FF9800"
-            android:textColor="#000" />
+            android:textSize="13sp"
+            app:cornerRadius="8dp"
+            app:backgroundTint="#4CAF50" />
+
+        <!-- Klik Kanan -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnRightClick"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:text="Klik Kanan"
+            android:textAllCaps="false"
+            android:textStyle="bold"
+            android:textSize="13sp"
+            app:cornerRadius="8dp"
+            app:backgroundTint="#FF9800" />
 
     </LinearLayout>
-</LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
