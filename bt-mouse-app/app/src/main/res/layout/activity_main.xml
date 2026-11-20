@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:padding="16dp"
+    android:background="#121212">
+
+    <!-- Area Touchpad -->
+    <com.example.btmouse.TouchpadView
+        android:id="@+id/touchpad"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="3"
+        android:background="#1E1E1E"
+        android:layout_marginEnd="16dp" />
+
+    <!-- Panel Tombol -->
+    <LinearLayout
+        android:layout_width="200dp"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Belum Terhubung"
+            android:textColor="#F44336"
+            android:layout_marginBottom="16dp"/>
+
+        <Button
+            android:id="@+id/btnScrollUp"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:text="Scroll ▲"
+            android:backgroundTint="#333333"
+            android:textColor="#FFF" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btnLeftClick"
+                android:layout_width="0dp"
+                android:layout_height="80dp"
+                android:layout_weight="1"
+                android:text="KIRI"
+                android:backgroundTint="#4CAF50"
+                android:textColor="#FFF"
+                android:layout_marginEnd="8dp"/>
+
+            <Button
+                android:id="@+id/btnRightClick"
+                android:layout_width="0dp"
+                android:layout_height="80dp"
+                android:layout_weight="1"
+                android:text="KANAN"
+                android:backgroundTint="#2196F3"
+                android:textColor="#FFF" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnScrollDown"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:text="Scroll ▼"
+            android:backgroundTint="#333333"
+            android:textColor="#FFF" />
+
+        <Button
+            android:id="@+id/btnConnect"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:text="PAIRING MODE"
+            android:layout_marginTop="32dp"
+            android:backgroundTint="#FF9800"
+            android:textColor="#000" />
+    </LinearLayout>
+</LinearLayout>
