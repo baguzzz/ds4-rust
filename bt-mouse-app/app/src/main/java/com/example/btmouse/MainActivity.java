@@ -1,74 +1,32 @@
 package com.example.btmouse;
 
-import android.Manifest;
 import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothHidDevice;
-import android.bluetooth.BluetoothHidDeviceAppSdpSettings;
-import android.bluetooth.BluetoothManager;
-import android.bluetooth.BluetoothProfile;
-import android.content.Context;
-import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.os.Build;
+import android.bluetooth.BluetoothSocket;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 
-import java.util.concurrent.Executor;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.Set;
+import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static final UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+    
     private BluetoothAdapter bluetoothAdapter;
-    private BluetoothHidDevice hidDevice;
-    private BluetoothDevice connectedHost;
+    private BluetoothSocket bluetoothSocket;
+    private OutputStream outputStream;
+    private boolean isConnected = false;
 
     private TextView statusText;
-
-    private static final int REQ_BT_PERM = 101;
-    private static final int REPORT_ID = 1;
-    private static final int REPORT_SIZE = 5;
-
-    private int mouseButtons = 0; // Bit 0: Kiri, Bit 1: Kanan, Bit 2: Tengah
-
-    // HID Report Descriptor untuk Mouse standar (3 tombol, X, Y, Wheel)
-    private static final byte[] HID_REPORT_DESCRIPTOR = {
-            (byte) 0x05, (byte) 0x01, // Usage Page (Generic Desktop)
-            (byte) 0x09, (byte) 0x02, // Usage (Mouse)
-            (byte) 0xA1, (byte) 0x01, // Collection (Application)
-            (byte) 0x85, (byte) 0x01, //   Report ID (1)
-            (byte) 0x09, (byte) 0x01, //   Usage (Pointer)
-            (byte) 0xA1, (byte) 0x00, //   Collection (Physical)
-            (byte) 0x05, (byte) 0x09, //     Usage Page (Button)
-            (byte) 0x19, (byte) 0x01, //     Usage Minimum (1)
-            (byte) 0x29, (byte) 0x03, //     Usage Maximum (3)
-            (byte) 0x15, (byte) 0x00, //     Logical Minimum (0)
-            (byte) 0x25, (byte) 0x01, //     Logical Maximum (1)
-            (byte) 0x95, (byte) 0x03, //     Report Count (3)
-            (byte) 0x75, (byte) 0x01, //     Report Size (1)
-            (byte) 0x81, (byte) 0x02, //     Input (Data, Var, Abs)
-            (byte) 0x95, (byte) 0x01, //     Report Count (1)
-            (byte) 0x75, (byte) 0x05, //     Report Size (5)
-            (byte) 0x81, (byte) 0x03, //     Input (Const, Var, Abs) ; Padding
-            (byte) 0x05, (byte) 0x01, //     Usage Page (Generic Desktop)
-            (byte) 0x09, (byte) 0x30, //     Usage (X)
-            (byte) 0x09, (byte) 0x31, //     Usage (Y)
-            (byte) 0x09, (byte) 0x38, //     Usage (Wheel)
-            (byte) 0x15, (byte) 0x81, //     Logical Minimum (-127)
-            (byte) 0x25, (byte) 0x7F, //     Logical Maximum (127)
-            (byte) 0x75, (byte) 0x08, //     Report Size (8)
-            (byte) 0x95, (byte) 0x03, //     Report Count (3)
-            (byte) 0x81, (byte) 0x06, //     Input (Data, Var, Rel)
-            (byte) 0xC0,               //   End Collection
-            (byte) 0xC0                // End Collection
-    };
+    private int mouseButtons = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -84,159 +42,104 @@ public class MainActivity extends AppCompatActivity {
         Button btnScrollDown = findViewById(R.id.btnScrollDown);
         Button btnConnect = findViewById(R.id.btnConnect);
 
-        // --- Setup Touchpad ---
+        // Touchpad -> Kirim X, Y
         touchpad.setOnTouchpadListener((dx, dy) -> {
-            if (connectedHost != null) {
-                sendMouseReport(mouseButtons, dx, dy, 0);
-            }
+            sendData(dx, dy, mouseButtons, 0);
         });
 
-        // --- Setup Klik Mouse ---
+        // Tombol Klik Kiri
         btnLeft.setOnTouchListener((v, event) -> {
-            handleButtonTouch(event, 0);
-            return false;
-        });
-
-        btnRight.setOnTouchListener((v, event) -> {
-            handleButtonTouch(event, 1);
-            return false;
-        });
-
-        // --- Setup Scroll ---
-        btnScrollUp.setOnClickListener(v -> {
-            if (connectedHost != null) sendMouseReport(mouseButtons, 0, 0, 1);
-        });
-        btnScrollDown.setOnClickListener(v -> {
-            if (connectedHost != null) sendMouseReport(mouseButtons, 0, 0, -1);
-        });
-
-        // --- Setup Pairing ---
-        btnConnect.setOnClickListener(v -> {
-            checkPermissionsAndInit();
-        });
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN}, REQ_BT_PERM);
-            } else {
-                initBluetooth();
+            if (event.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+                mouseButtons |= 1; sendData(0, 0, mouseButtons, 0);
+            } else if (event.getAction() == android.view.MotionEvent.ACTION_UP) {
+                mouseButtons &= ~1; sendData(0, 0, mouseButtons, 0);
             }
-        } else {
-            initBluetooth();
-        }
-    }
+            return false;
+        });
 
-    private void handleButtonTouch(android.view.MotionEvent event, int btnIndex) {
-        if (event.getAction() == android.view.MotionEvent.ACTION_DOWN) {
-            mouseButtons |= (1 << btnIndex);
-            if (connectedHost != null) sendMouseReport(mouseButtons, 0, 0, 0);
-        } else if (event.getAction() == android.view.MotionEvent.ACTION_UP) {
-            mouseButtons &= ~(1 << btnIndex);
-            if (connectedHost != null) sendMouseReport(mouseButtons, 0, 0, 0);
-        }
-    }
+        // Tombol Klik Kanan
+        btnRight.setOnTouchListener((v, event) -> {
+            if (event.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+                mouseButtons |= 2; sendData(0, 0, mouseButtons, 0);
+            } else if (event.getAction() == android.view.MotionEvent.ACTION_UP) {
+                mouseButtons &= ~2; sendData(0, 0, mouseButtons, 0);
+            }
+            return false;
+        });
 
-    private void checkPermissionsAndInit() {
-        initBluetooth();
+        // Scroll
+        btnScrollUp.setOnClickListener(v -> sendData(0, 0, mouseButtons, 1));
+        btnScrollDown.setOnClickListener(v -> sendData(0, 0, mouseButtons, -1));
+
+        // Tombol Connect
+        btnConnect.setOnClickListener(v -> connectToPC());
     }
 
     @SuppressLint("MissingPermission")
-    private void initBluetooth() {
-        BluetoothManager bm = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-        bluetoothAdapter = bm.getAdapter();
-        
+    private void connectToPC() {
+        if (isConnected) return;
+
+        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) {
-            Toast.makeText(this, "Nyalakan Bluetooth terlebih dahulu", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Nyalakan Bluetooth", Toast.LENGTH_SHORT).show();
             return;
         }
-        bluetoothAdapter.getProfileProxy(this, profileListener, BluetoothProfile.HID_DEVICE);
-    }
 
-    private final BluetoothProfile.ServiceListener profileListener = new BluetoothProfile.ServiceListener() {
-        @Override
-        public void onServiceConnected(int profile, BluetoothProfile proxy) {
-            if (profile == BluetoothProfile.HID_DEVICE) {
-                hidDevice = (BluetoothHidDevice) proxy;
-                registerHidApp();
+        // Mencari perangkat PC yang sudah di-pairing
+        Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
+        BluetoothDevice targetDevice = null;
+        
+        // CARI NAMA PC ANDA DI SINI (Ubah "LAPTOP" atau "PC" sesuai nama Bluetooth komputer Anda)
+        for (BluetoothDevice device : pairedDevices) {
+            String name = device.getName();
+            if (name != null && (name.contains("PC") || name.contains("LAPTOP") || name.contains("DESKTOP"))) {
+                targetDevice = device;
+                break;
             }
         }
-        @Override
-        public void onServiceDisconnected(int profile) {
-            hidDevice = null;
-        }
-    };
 
-    @SuppressLint("MissingPermission")
-    private void registerHidApp() {
-        if (hidDevice == null) return;
-        
-        BluetoothHidDeviceAppSdpSettings sdp = new BluetoothHidDeviceAppSdpSettings(
-                "BT Mouse",
-                "Android Bluetooth Mouse",
-                "com.example.btmouse",
-                BluetoothHidDevice.SUBCLASS1_MOUSE, // Subclass Mouse
-                HID_REPORT_DESCRIPTOR
-        );
-        
-        Executor executor = getMainExecutor();
-        boolean ok = hidDevice.registerApp(sdp, null, null, executor, callback);
-        
-        if (ok) {
-            statusText.setText("Pairing Mode Aktif. Cari 'BT Mouse' di PC Anda.");
-            statusText.setTextColor(0xFFFF9800);
+        if (targetDevice == null) {
+            Toast.makeText(this, "Pairing HP ke PC dulu di Pengaturan Bluetooth!", Toast.LENGTH_LONG).show();
+            return;
         }
-    }
 
-    private final BluetoothHidDevice.Callback callback = new BluetoothHidDevice.Callback() {
-        @Override
-        public void onConnectionStateChanged(BluetoothDevice device, int state) {
-            runOnUiThread(() -> {
-                if (state == BluetoothProfile.STATE_CONNECTED) {
-                    connectedHost = device;
-                    statusText.setText("✅ Terhubung ke " + device.getName());
+        final BluetoothDevice finalDevice = targetDevice;
+        statusText.setText("Menghubungkan...");
+
+        new Thread(() -> {
+            try {
+                bluetoothAdapter.cancelDiscovery();
+                bluetoothSocket = finalDevice.createRfcommSocketToServiceRecord(MY_UUID);
+                bluetoothSocket.connect();
+                outputStream = bluetoothSocket.getOutputStream();
+                isConnected = true;
+                runOnUiThread(() -> {
+                    statusText.setText("✅ Terhubung ke " + finalDevice.getName());
                     statusText.setTextColor(0xFF4CAF50);
-                } else if (state == BluetoothProfile.STATE_DISCONNECTED) {
-                    connectedHost = null;
-                    statusText.setText("Terputus. Pairing ulang dari PC.");
+                });
+            } catch (IOException e) {
+                runOnUiThread(() -> {
+                    statusText.setText("❌ Gagal. Pastikan PC membuat Port COM Bluetooth.");
                     statusText.setTextColor(0xFFF44336);
-                }
-            });
-        }
-    };
+                });
+            }
+        }).start();
+    }
 
-    @SuppressLint("MissingPermission")
-    private void sendMouseReport(int buttons, int dx, int dy, int wheel) {
-        if (hidDevice == null || connectedHost == null) return;
-
-        // Report: [ID, Buttons, X, Y, Wheel]
-        byte[] report = new byte[REPORT_SIZE];
-        report[0] = (byte) REPORT_ID;
-        report[1] = (byte) buttons;
-        report[2] = (byte) dx;
-        report[3] = (byte) dy;
-        report[4] = (byte) wheel;
-
+    private void sendData(int dx, int dy, int buttons, int wheel) {
+        if (!isConnected || outputStream == null) return;
         try {
-            hidDevice.sendReport(connectedHost, REPORT_ID, report);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQ_BT_PERM) initBluetooth();
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (hidDevice != null) {
-            try { hidDevice.unregisterApp(); } catch (Exception ignored) {}
-        }
-        if (bluetoothAdapter != null) {
-            bluetoothAdapter.closeProfileProxy(BluetoothProfile.HID_DEVICE, hidDevice);
+            // Format paket: [X, Y, Buttons, Wheel] (4 byte)
+            byte[] buffer = new byte[4];
+            buffer[0] = (byte) dx;
+            buffer[1] = (byte) dy;
+            buffer[2] = (byte) buttons;
+            buffer[3] = (byte) wheel;
+            outputStream.write(buffer);
+            outputStream.flush();
+        } catch (IOException e) {
+            isConnected = false;
+            runOnUiThread(() -> statusText.setText("Terputus"));
         }
     }
 }
