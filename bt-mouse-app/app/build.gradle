@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId "com.example.btmouse"
-        minSdk 28        // Wajib API 28 (Android 9) untuk BluetoothHidDevice
+        minSdk 26        // PERBAIKAN: Ubah dari 28 ke 26 (Android 8.0)
         targetSdk 34
         versionCode 1
         versionName "1.0"
