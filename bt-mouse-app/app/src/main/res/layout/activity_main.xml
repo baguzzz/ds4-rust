@@ -3,41 +3,49 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="horizontal"
-    android:padding="16dp"
-    android:background="#121212">
+    android:background="#121212"
+    android:fitsSystemWindows="true"
+    android:padding="16dp">
 
-    <!-- Area Touchpad -->
+    <!-- Area Touchpad (Kiri) -->
     <com.example.btmouse.TouchpadView
         android:id="@+id/touchpad"
         android:layout_width="0dp"
         android:layout_height="match_parent"
-        android:layout_weight="3"
+        android:layout_weight="1"
         android:background="#1E1E1E"
         android:layout_marginEnd="16dp" />
 
-    <!-- Panel Tombol -->
+    <!-- Panel Tombol (Kanan) -->
     <LinearLayout
-        android:layout_width="200dp"
+        android:layout_width="220dp"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:gravity="center">
+        android:gravity="center_vertical"
+        android:paddingHorizontal="8dp">
 
+        <!-- Status Teks -->
         <TextView
             android:id="@+id/statusText"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Belum Terhubung"
             android:textColor="#F44336"
-            android:layout_marginBottom="16dp"/>
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="24dp" />
 
+        <!-- Tombol Scroll Atas -->
         <Button
             android:id="@+id/btnScrollUp"
             android:layout_width="match_parent"
             android:layout_height="50dp"
-            android:text="Scroll ▲"
+            android:text="SCROLL ▲"
             android:backgroundTint="#333333"
             android:textColor="#FFF" />
 
+        <!-- Tombol Klik Kiri & Kanan -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -51,6 +59,7 @@
                 android:layout_height="80dp"
                 android:layout_weight="1"
                 android:text="KIRI"
+                android:textStyle="bold"
                 android:backgroundTint="#4CAF50"
                 android:textColor="#FFF"
                 android:layout_marginEnd="8dp"/>
@@ -61,25 +70,30 @@
                 android:layout_height="80dp"
                 android:layout_weight="1"
                 android:text="KANAN"
+                android:textStyle="bold"
                 android:backgroundTint="#2196F3"
                 android:textColor="#FFF" />
         </LinearLayout>
 
+        <!-- Tombol Scroll Bawah -->
         <Button
             android:id="@+id/btnScrollDown"
             android:layout_width="match_parent"
             android:layout_height="50dp"
-            android:text="Scroll ▼"
+            android:text="SCROLL ▼"
             android:backgroundTint="#333333"
             android:textColor="#FFF" />
 
+        <!-- Tombol Connect / Pairing -->
         <Button
             android:id="@+id/btnConnect"
             android:layout_width="match_parent"
             android:layout_height="50dp"
             android:text="PAIRING MODE"
+            android:textStyle="bold"
             android:layout_marginTop="32dp"
             android:backgroundTint="#FF9800"
             android:textColor="#000" />
+
     </LinearLayout>
 </LinearLayout>
