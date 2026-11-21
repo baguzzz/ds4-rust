@@ -5,6 +5,8 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.os.Bundle;
 import android.view.MotionEvent;
+import android.view.View;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.Spinner;
@@ -17,15 +19,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-public class MainActivity extends AppCompatActivity implements ConnectionManager.ConnectionListener {
+public class MainActivity extends AppCompatActivity {
 
     private ConnectionManager connectionManager;
     private BluetoothAdapter bluetoothAdapter;
     private List<BluetoothDevice> deviceList = new ArrayList<>();
-    private ArrayAdapter<String> adapter;
+    private BluetoothDevice selectedDevice = null;
 
-    private Spinner deviceSpinner;
     private TextView statusText;
+    private Spinner deviceSpinner;
     private Button btnConnect;
     private int mouseButtons = 0;
 
@@ -34,9 +36,12 @@ public class MainActivity extends AppCompatActivity implements ConnectionManager
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        connectionManager = ConnectionManager.getInstance();
+        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+
         statusText = findViewById(R.id.statusText);
-        btnConnect = findViewById(R.id.btnConnect);
         deviceSpinner = findViewById(R.id.deviceSpinner);
+        btnConnect = findViewById(R.id.btnConnect);
         TouchpadView touchpad = findViewById(R.id.touchpad);
 
         Button btnLeft = findViewById(R.id.btnLeftClick);
@@ -44,106 +49,110 @@ public class MainActivity extends AppCompatActivity implements ConnectionManager
         Button btnScrollUp = findViewById(R.id.btnScrollUp);
         Button btnScrollDown = findViewById(R.id.btnScrollDown);
 
-        connectionManager = ConnectionManager.getInstance();
-        connectionManager.setConnectionListener(this);
+        loadPairedDevices();
 
-        setupDeviceSpinner();
+        deviceSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (position < deviceList.size()) {
+                    selectedDevice = deviceList.get(position);
+                }
+            }
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
 
         btnConnect.setOnClickListener(v -> {
             if (connectionManager.isConnected()) {
                 connectionManager.disconnect();
+                statusText.setText("Terputus");
+                statusText.setTextColor(0xFFB0BEC5);
+                btnConnect.setText("Connect");
             } else {
-                connectSelectedDevice();
+                if (selectedDevice == null) {
+                    Toast.makeText(this, "Pilih perangkat dari dropdown!", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                statusText.setText("Menghubungkan...");
+                connectionManager.connectBluetooth(selectedDevice, new ConnectionManager.ConnectionCallback() {
+                    @Override
+                    public void onSuccess(String deviceName) {
+                        runOnUiThread(() -> {
+                            statusText.setText("✅ Terhubung ke " + deviceName);
+                            statusText.setTextColor(0xFF4CAF50);
+                            btnConnect.setText("Disconnect");
+                        });
+                    }
+
+                    @Override
+                    public void onFailure(String errorMessage) {
+                        runOnUiThread(() -> {
+                            statusText.setText("❌ Gagal: " + errorMessage);
+                            statusText.setTextColor(0xFFF44336);
+                            btnConnect.setText("Connect");
+                        });
+                    }
+                });
             }
         });
 
-        touchpad.setOnTouchpadListener((dx, dy) -> connectionManager.sendData(dx, dy, mouseButtons, 0));
+        // Touchpad Listener -> Kirim X, Y (Header 0xAA otomatis ditambahkan ConnectionManager)
+        touchpad.setOnTouchpadListener((dx, dy) -> {
+            connectionManager.sendData(dx, dy, mouseButtons, 0);
+        });
 
+        // Klik Kiri
         btnLeft.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                mouseButtons |= 1; connectionManager.sendData(0, 0, mouseButtons, 0);
+                mouseButtons |= 1;
+                connectionManager.sendData(0, 0, mouseButtons, 0);
             } else if (event.getAction() == MotionEvent.ACTION_UP) {
-                mouseButtons &= ~1; connectionManager.sendData(0, 0, mouseButtons, 0);
+                mouseButtons &= ~1;
+                connectionManager.sendData(0, 0, mouseButtons, 0);
             }
             return false;
         });
 
+        // Klik Kanan
         btnRight.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                mouseButtons |= 2; connectionManager.sendData(0, 0, mouseButtons, 0);
+                mouseButtons |= 2;
+                connectionManager.sendData(0, 0, mouseButtons, 0);
             } else if (event.getAction() == MotionEvent.ACTION_UP) {
-                mouseButtons &= ~2; connectionManager.sendData(0, 0, mouseButtons, 0);
+                mouseButtons &= ~2;
+                connectionManager.sendData(0, 0, mouseButtons, 0);
             }
             return false;
         });
 
+        // Scroll Up & Down
         btnScrollUp.setOnClickListener(v -> connectionManager.sendData(0, 0, mouseButtons, 1));
         btnScrollDown.setOnClickListener(v -> connectionManager.sendData(0, 0, mouseButtons, -1));
-
-        updateUIStatus();
     }
 
     @SuppressLint("MissingPermission")
-    private void setupDeviceSpinner() {
-        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        List<String> deviceNames = new ArrayList<>();
+    private void loadPairedDevices() {
+        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) {
+            Toast.makeText(this, "Nyalakan Bluetooth terlebih dahulu", Toast.LENGTH_SHORT).show();
+            return;
+        }
 
-        if (bluetoothAdapter != null && bluetoothAdapter.isEnabled()) {
-            Set<BluetoothDevice> paired = bluetoothAdapter.getBondedDevices();
-            if (paired != null && !paired.isEmpty()) {
-                for (BluetoothDevice dev : paired) {
-                    deviceList.add(dev);
-                    String name = dev.getName() != null ? dev.getName() : dev.getAddress();
-                    deviceNames.add(name);
-                }
+        Set<BluetoothDevice> paired = bluetoothAdapter.getBondedDevices();
+        deviceList.clear();
+        List<String> names = new ArrayList<>();
+
+        if (paired != null && !paired.isEmpty()) {
+            for (BluetoothDevice dev : paired) {
+                deviceList.add(dev);
+                names.add(dev.getName() != null ? dev.getName() : dev.getAddress());
             }
+            selectedDevice = deviceList.get(0);
+        } else {
+            names.add("Tidak ada Paired Device");
         }
 
-        if (deviceNames.isEmpty()) {
-            deviceNames.add("Tidak ada BT terpasang");
-        }
-
-        adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, deviceNames);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, names);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         deviceSpinner.setAdapter(adapter);
-    }
-
-    private void connectSelectedDevice() {
-        int pos = deviceSpinner.getSelectedItemPosition();
-        if (pos >= 0 && pos < deviceList.size()) {
-            BluetoothDevice selectedDev = deviceList.get(pos);
-            statusText.setText("Menghubungkan...");
-            statusText.setTextColor(0xFFFF9800);
-            connectionManager.connectBluetooth(selectedDev);
-        } else {
-            Toast.makeText(this, "Pilih perangkat Bluetooth terlebih dahulu", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void updateUIStatus() {
-        if (connectionManager.isConnected()) {
-            statusText.setText("✅ Terhubung");
-            statusText.setTextColor(0xFF4CAF50);
-            btnConnect.setText("Disconnect");
-        } else {
-            statusText.setText("Belum Terhubung");
-            statusText.setTextColor(0xFFB0BEC5);
-            btnConnect.setText("Connect");
-        }
-    }
-
-    @Override
-    public void onConnected(String deviceName) {
-        statusText.setText("✅ Terhubung: " + deviceName);
-        statusText.setTextColor(0xFF4CAF50);
-        btnConnect.setText("Disconnect");
-        Toast.makeText(this, "Terhubung ke " + deviceName, Toast.LENGTH_SHORT).show();
-    }
-
-    @Override
-    public void onDisconnected(String reason) {
-        statusText.setText("❌ " + reason);
-        statusText.setTextColor(0xFFF44336);
-        btnConnect.setText("Connect");
     }
 }
