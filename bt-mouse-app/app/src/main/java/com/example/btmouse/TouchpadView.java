@@ -12,8 +12,9 @@ public class TouchpadView extends View {
     }
 
     private float lastX, lastY;
+    private float accumX = 0, accumY = 0; // Menampung pecahan desimal
     private OnTouchpadListener listener;
-    private final float SENSITIVITY = 1.5f; // Semakin kecil, semakin cepat mouse bergerak
+    private final float SENSITIVITY = 1.5f;
 
     public TouchpadView(Context context) { super(context); }
     public TouchpadView(Context context, AttributeSet attrs) { super(context, attrs); }
@@ -26,20 +27,28 @@ public class TouchpadView extends View {
             case MotionEvent.ACTION_DOWN:
                 lastX = event.getX();
                 lastY = event.getY();
+                accumX = 0;
+                accumY = 0;
                 return true;
             case MotionEvent.ACTION_MOVE:
                 float dx = (event.getX() - lastX) / SENSITIVITY;
                 float dy = (event.getY() - lastY) / SENSITIVITY;
 
-                // HID Mouse maksimal bergerak -127 sampai 127 per report
-                int finalDx = (int) Math.max(-127, Math.min(127, dx));
-                int finalDy = (int) Math.max(-127, Math.min(127, dy));
+                accumX += dx;
+                accumY += dy;
+
+                int finalDx = (int) accumX;
+                int finalDy = (int) accumY;
 
                 if (finalDx != 0 || finalDy != 0) {
                     if (listener != null) listener.onMove(finalDx, finalDy);
-                    lastX = event.getX();
-                    lastY = event.getY();
+                    // Kurangi akumulasi dengan nilai yang sudah dikirim
+                    accumX -= finalDx;
+                    accumY -= finalDy;
                 }
+                
+                lastX = event.getX();
+                lastY = event.getY();
                 return true;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
