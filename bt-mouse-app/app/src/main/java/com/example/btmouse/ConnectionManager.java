@@ -8,23 +8,20 @@ import android.util.Log;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.lang.reflect.Method;
 import java.util.UUID;
 
 public class ConnectionManager {
-
     private static final String TAG = "ConnectionManager";
-    private static final UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+    private static final UUID MY_UUID =
+            UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+
     private static ConnectionManager instance;
 
-    private BluetoothAdapter bluetoothAdapter;
     private BluetoothSocket bluetoothSocket;
     private OutputStream outputStream;
-    private boolean isConnected = false;
+    private volatile boolean isConnected = false;
 
-    private ConnectionManager() {
-        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-    }
+    private ConnectionManager() {}
 
     public static synchronized ConnectionManager getInstance() {
         if (instance == null) {
@@ -43,38 +40,60 @@ public class ConnectionManager {
     }
 
     @SuppressLint("MissingPermission")
-    public void connectBluetooth(BluetoothDevice device, ConnectionCallback callback) {
-        if (isConnected) disconnect();
+    public void connectBluetooth(
+            BluetoothDevice device,
+            ConnectionCallback callback
+    ) {
+        if (isConnected) {
+            disconnect();
+        }
 
         new Thread(() -> {
+            BluetoothSocket socket = null;
+
             try {
-                if (bluetoothAdapter != null && bluetoothAdapter.isDiscovering()) {
-                    bluetoothAdapter.cancelDiscovery();
+                BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+
+                if (adapter == null) {
+                    throw new IOException("Bluetooth tidak tersedia");
                 }
 
-                BluetoothSocket socket = null;
-                // 1. Coba koneksi SPP RFCOMM standar via UUID
-                try {
-                    socket = device.createRfcommSocketToServiceRecord(MY_UUID);
-                    socket.connect();
-                } catch (IOException e1) {
-                    Log.w(TAG, "Standard UUID connect failed, trying reflection Channel 1...");
-                    // 2. Fallback ke Refleksi Channel 1 (seperti pada androidapp)
-                    Method m = device.getClass().getMethod("createRfcommSocket", int.class);
-                    socket = (BluetoothSocket) m.invoke(device, 1);
-                    socket.connect();
+                if (!adapter.isEnabled()) {
+                    throw new IOException("Bluetooth belum aktif");
                 }
 
+                if (adapter.isDiscovering()) {
+                    adapter.cancelDiscovery();
+                }
+
+                socket = device.createRfcommSocketToServiceRecord(MY_UUID);
                 bluetoothSocket = socket;
-                outputStream = bluetoothSocket.getOutputStream();
+
+                socket.connect();
+
+                outputStream = socket.getOutputStream();
                 isConnected = true;
 
                 if (callback != null) {
-                    callback.onSuccess(device.getName());
+                    callback.onSuccess(
+                            device.getName() != null
+                                    ? device.getName()
+                                    : device.getAddress()
+                    );
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Connection error", e);
-                disconnect();
+
+                if (socket != null) {
+                    try {
+                        socket.close();
+                    } catch (IOException ignored) {}
+                }
+
+                bluetoothSocket = null;
+                outputStream = null;
+                isConnected = false;
+
                 if (callback != null) {
                     callback.onFailure(e.getMessage());
                 }
@@ -82,39 +101,47 @@ public class ConnectionManager {
         }).start();
     }
 
-    public void sendData(int dx, int dy, int buttons, int wheel) {
-        if (!isConnected || outputStream == null) return;
+    public synchronized void sendData(
+            int dx,
+            int dy,
+            int buttons,
+            int wheel
+    ) {
+        if (!isConnected || outputStream == null) {
+            return;
+        }
 
-        // Mengirim Paket 5-Byte dengan Header 0xAA (Persis seperti androidapp Gamepad)
-        byte[] buffer = new byte[5];
-        buffer[0] = (byte) 0xAA; // Header Sync Byte
-        buffer[1] = (byte) dx;
-        buffer[2] = (byte) dy;
-        buffer[3] = (byte) buttons;
-        buffer[4] = (byte) wheel;
+        byte[] packet = new byte[5];
+        packet[0] = (byte) 0xAA;
+        packet[1] = (byte) dx;
+        packet[2] = (byte) dy;
+        packet[3] = (byte) buttons;
+        packet[4] = (byte) wheel;
 
         try {
-            outputStream.write(buffer);
+            outputStream.write(packet);
             outputStream.flush();
         } catch (IOException e) {
-            Log.e(TAG, "Error sending data, disconnecting...", e);
+            Log.e(TAG, "Error sending data", e);
             disconnect();
         }
     }
 
     public synchronized void disconnect() {
         isConnected = false;
-        try {
-            if (outputStream != null) {
+
+        if (outputStream != null) {
+            try {
                 outputStream.close();
-                outputStream = null;
-            }
-            if (bluetoothSocket != null) {
+            } catch (IOException ignored) {}
+            outputStream = null;
+        }
+
+        if (bluetoothSocket != null) {
+            try {
                 bluetoothSocket.close();
-                bluetoothSocket = null;
-            }
-        } catch (IOException e) {
-            Log.e(TAG, "Error closing socket", e);
+            } catch (IOException ignored) {}
+            bluetoothSocket = null;
         }
     }
 }
