@@ -16,30 +16,28 @@ public class TouchpadView extends View {
         void onZoom(int direction);
     }
 
+    private static final float ONE_FINGER_SENSITIVITY = 1.5f;
+
     private OnTouchpadListener listener;
 
+    private float downX;
+    private float downY;
     private float lastX;
     private float lastY;
-    private float accumX;
-    private float accumY;
+    private float accumulatedX;
+    private float accumulatedY;
 
-    private float twoFingerLastY;
+    private float lastAverageY;
     private float lastPinchDistance;
     private float scrollAccumulator;
     private float zoomAccumulator;
 
-    private float downX;
-    private float downY;
-
+    private long downTime;
     private boolean moved;
     private boolean twoFingerGesture;
     private boolean twoFingerMoved;
     private boolean pinchStarted;
-    private boolean rightClickSent;
 
-    private long downTime;
-
-    private final float sensitivity = 1.5f;
     private final float touchSlop;
     private final float scrollThreshold;
     private final float zoomThreshold;
@@ -53,7 +51,6 @@ public class TouchpadView extends View {
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         scrollThreshold = 30f * getResources().getDisplayMetrics().density;
         zoomThreshold = 24f * getResources().getDisplayMetrics().density;
-        setClickable(true);
     }
 
     public void setOnTouchpadListener(OnTouchpadListener listener) {
@@ -66,22 +63,21 @@ public class TouchpadView extends View {
 
         switch (action) {
             case MotionEvent.ACTION_DOWN:
-                lastX = event.getX(0);
-                lastY = event.getY(0);
-                downX = lastX;
-                downY = lastY;
+                downX = event.getX(0);
+                downY = event.getY(0);
+                lastX = downX;
+                lastY = downY;
                 downTime = System.currentTimeMillis();
 
-                accumX = 0f;
-                accumY = 0f;
-                scrollAccumulator = 0f;
-                zoomAccumulator = 0f;
+                accumulatedX = 0;
+                accumulatedY = 0;
+                scrollAccumulator = 0;
+                zoomAccumulator = 0;
 
                 moved = false;
                 twoFingerGesture = false;
                 twoFingerMoved = false;
                 pinchStarted = false;
-                rightClickSent = false;
                 return true;
 
             case MotionEvent.ACTION_POINTER_DOWN:
@@ -89,38 +85,36 @@ public class TouchpadView extends View {
                     twoFingerGesture = true;
                     twoFingerMoved = false;
                     pinchStarted = false;
-                    scrollAccumulator = 0f;
-                    zoomAccumulator = 0f;
-
-                    twoFingerLastY = averageY(event);
-                    lastPinchDistance = distanceBetweenFirstTwoPointers(event);
+                    scrollAccumulator = 0;
+                    zoomAccumulator = 0;
+                    lastAverageY = averageY(event);
+                    lastPinchDistance = pointerDistance(event);
                 }
                 return true;
 
             case MotionEvent.ACTION_MOVE:
                 if (event.getPointerCount() >= 2) {
-                    handleTwoFingerMove(event);
+                    handleTwoFingerGesture(event);
                 } else if (!twoFingerGesture) {
                     handleOneFingerMove(event);
                 }
                 return true;
 
             case MotionEvent.ACTION_POINTER_UP:
-                if (twoFingerGesture
-                        && event.getPointerCount() == 2
+                if (event.getPointerCount() == 2
+                        && twoFingerGesture
                         && !twoFingerMoved
-                        && !rightClickSent) {
-                    rightClickSent = true;
-                    if (listener != null) {
-                        listener.onRightClick();
-                    }
+                        && listener != null) {
+                    listener.onRightClick();
                 }
                 return true;
 
             case MotionEvent.ACTION_UP:
                 if (!twoFingerGesture && !moved) {
+                    float dx = event.getX(0) - downX;
+                    float dy = event.getY(0) - downY;
+                    float distance = (float) Math.sqrt(dx * dx + dy * dy);
                     long duration = System.currentTimeMillis() - downTime;
-                    float distance = distance(downX, downY, event.getX(), event.getY());
 
                     if (duration < 500 && distance <= touchSlop * 1.5f) {
                         if (listener != null) {
@@ -139,37 +133,42 @@ public class TouchpadView extends View {
     }
 
     private void handleOneFingerMove(MotionEvent event) {
-        float x = event.getX(0);
-        float y = event.getY(0);
+        float currentX = event.getX(0);
+        float currentY = event.getY(0);
 
-        if (distance(downX, downY, x, y) > touchSlop) {
+        float startDx = currentX - downX;
+        float startDy = currentY - downY;
+        float startDistance =
+                (float) Math.sqrt(startDx * startDx + startDy * startDy);
+
+        if (startDistance > touchSlop) {
             moved = true;
         }
 
-        float dx = (x - lastX) / sensitivity;
-        float dy = (y - lastY) / sensitivity;
+        float dx = (currentX - lastX) / ONE_FINGER_SENSITIVITY;
+        float dy = (currentY - lastY) / ONE_FINGER_SENSITIVITY;
 
-        accumX += dx;
-        accumY += dy;
+        accumulatedX += dx;
+        accumulatedY += dy;
 
-        int sendX = (int) accumX;
-        int sendY = (int) accumY;
+        int sendX = (int) accumulatedX;
+        int sendY = (int) accumulatedY;
 
         if ((sendX != 0 || sendY != 0) && listener != null) {
             listener.onMove(sendX, sendY);
-            accumX -= sendX;
-            accumY -= sendY;
+            accumulatedX -= sendX;
+            accumulatedY -= sendY;
         }
 
-        lastX = x;
-        lastY = y;
+        lastX = currentX;
+        lastY = currentY;
     }
 
-    private void handleTwoFingerMove(MotionEvent event) {
-        float currentDistance = distanceBetweenFirstTwoPointers(event);
-        float currentAverageY = averageY(event);
+    private void handleTwoFingerGesture(MotionEvent event) {
+        float distance = pointerDistance(event);
+        float averageY = averageY(event);
 
-        float distanceChange = currentDistance - lastPinchDistance;
+        float distanceChange = distance - lastPinchDistance;
 
         if (Math.abs(distanceChange) > 2f) {
             pinchStarted = true;
@@ -180,50 +179,44 @@ public class TouchpadView extends View {
             zoomAccumulator += distanceChange;
 
             while (Math.abs(zoomAccumulator) >= zoomThreshold) {
-                int direction = zoomAccumulator > 0f ? 1 : -1;
+                int direction = zoomAccumulator > 0 ? 1 : -1;
+
                 if (listener != null) {
                     listener.onZoom(direction);
                 }
+
                 zoomAccumulator -= direction * zoomThreshold;
             }
         } else {
-            float deltaY = currentAverageY - twoFingerLastY;
+            float deltaY = averageY - lastAverageY;
 
             if (Math.abs(deltaY) > 1f) {
                 twoFingerMoved = true;
                 scrollAccumulator += deltaY;
 
                 while (Math.abs(scrollAccumulator) >= scrollThreshold) {
-                    // Geser dua jari ke atas = scroll ke atas.
-                    int direction = scrollAccumulator < 0f ? 1 : -1;
+                    int direction = scrollAccumulator < 0 ? 1 : -1;
+
                     if (listener != null) {
                         listener.onScroll(direction);
                     }
+
                     scrollAccumulator -= direction * scrollThreshold;
                 }
             }
         }
 
-        lastPinchDistance = currentDistance;
-        twoFingerLastY = currentAverageY;
+        lastPinchDistance = distance;
+        lastAverageY = averageY;
     }
 
     private float averageY(MotionEvent event) {
         return (event.getY(0) + event.getY(1)) / 2f;
     }
 
-    private float distanceBetweenFirstTwoPointers(MotionEvent event) {
-        return distance(
-                event.getX(0),
-                event.getY(0),
-                event.getX(1),
-                event.getY(1)
-        );
-    }
-
-    private float distance(float x1, float y1, float x2, float y2) {
-        float dx = x2 - x1;
-        float dy = y2 - y1;
+    private float pointerDistance(MotionEvent event) {
+        float dx = event.getX(1) - event.getX(0);
+        float dy = event.getY(1) - event.getY(0);
         return (float) Math.sqrt(dx * dx + dy * dy);
     }
 }
