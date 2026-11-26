@@ -11,13 +11,13 @@ public class TouchpadView extends View {
         void onMove(int dx, int dy);
     }
 
-    private OnTouchpadListener listener;
+    private static final float SENSITIVITY = 1.5f;
+
     private float lastX;
     private float lastY;
     private float accumulatedX;
     private float accumulatedY;
-
-    private static final float SENSITIVITY = 1.5f;
+    private OnTouchpadListener listener;
 
     public TouchpadView(Context context) {
         super(context);
