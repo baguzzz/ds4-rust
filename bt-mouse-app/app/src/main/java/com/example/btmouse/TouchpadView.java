@@ -11,13 +11,13 @@ public class TouchpadView extends View {
         void onMove(int dx, int dy);
     }
 
-    private static final float SENSITIVITY = 1.5f;
-
+    private OnTouchpadListener listener;
     private float lastX;
     private float lastY;
     private float accumulatedX;
     private float accumulatedY;
-    private OnTouchpadListener listener;
+
+    private static final float SENSITIVITY = 1.5f;
 
     public TouchpadView(Context context) {
         super(context);
@@ -33,22 +33,20 @@ public class TouchpadView extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        int action = event.getActionMasked();
-
-        switch (action) {
+        switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 lastX = event.getX();
                 lastY = event.getY();
-                accumulatedX = 0f;
-                accumulatedY = 0f;
+                accumulatedX = 0;
+                accumulatedY = 0;
                 return true;
 
             case MotionEvent.ACTION_MOVE:
-                float currentX = event.getX();
-                float currentY = event.getY();
+                float x = event.getX();
+                float y = event.getY();
 
-                float dx = (currentX - lastX) / SENSITIVITY;
-                float dy = (currentY - lastY) / SENSITIVITY;
+                float dx = (x - lastX) / SENSITIVITY;
+                float dy = (y - lastY) / SENSITIVITY;
 
                 accumulatedX += dx;
                 accumulatedY += dy;
@@ -62,17 +60,16 @@ public class TouchpadView extends View {
                     accumulatedY -= sendY;
                 }
 
-                lastX = currentX;
-                lastY = currentY;
+                lastX = x;
+                lastY = y;
                 return true;
 
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
-                accumulatedX = 0f;
-                accumulatedY = 0f;
                 return true;
-        }
 
-        return super.onTouchEvent(event);
+            default:
+                return super.onTouchEvent(event);
+        }
     }
 }
