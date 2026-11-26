@@ -5,14 +5,9 @@ import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.pm.PackageManager;
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.MotionEvent;
-import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -27,21 +22,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-public class MainActivity extends AppCompatActivity implements SensorEventListener {
+public class MainActivity extends AppCompatActivity {
 
     private static final int REQUEST_BLUETOOTH_CONNECT = 1001;
-
-    private static final int BUTTON_LEFT = 1;
-    private static final int BUTTON_RIGHT = 2;
-    private static final int BUTTON_ZOOM = 4;
-
-    private static final float GYRO_DEAD_ZONE = 0.035f;
-    private static final float AIR_MOUSE_SENSITIVITY = 180f;
+    private static final int LEFT_BUTTON = 1;
+    private static final int RIGHT_BUTTON = 2;
 
     private ConnectionManager connectionManager;
     private BluetoothAdapter bluetoothAdapter;
-    private SensorManager sensorManager;
-    private Sensor gyroscope;
 
     private final List<BluetoothDevice> deviceList = new ArrayList<>();
     private BluetoothDevice selectedDevice;
@@ -49,11 +37,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private TextView statusText;
     private Spinner deviceSpinner;
     private Button btnConnect;
-    private Button btnAirMouse;
-
     private int mouseButtons = 0;
-    private boolean airMouseEnabled = false;
-    private long lastGyroTimestamp = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,21 +47,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         connectionManager = ConnectionManager.getInstance();
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
-        sensorManager =
-                (SensorManager) getSystemService(SENSOR_SERVICE);
-
-        if (sensorManager != null) {
-            gyroscope =
-                    sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
-        }
-
         statusText = findViewById(R.id.statusText);
         deviceSpinner = findViewById(R.id.deviceSpinner);
         btnConnect = findViewById(R.id.btnConnect);
-        btnAirMouse = findViewById(R.id.btnAirMouse);
 
         TouchpadView touchpad = findViewById(R.id.touchpad);
-
         Button btnLeft = findViewById(R.id.btnLeftClick);
         Button btnRight = findViewById(R.id.btnRightClick);
         Button btnScrollUp = findViewById(R.id.btnScrollUp);
@@ -90,7 +64,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     @Override
                     public void onItemSelected(
                             AdapterView<?> parent,
-                            View view,
+                            android.view.View view,
                             int position,
                             long id
                     ) {
@@ -120,7 +94,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             if (selectedDevice == null) {
                 Toast.makeText(
                         this,
-                        "Pilih perangkat dari dropdown!",
+                        "Pilih perangkat dari dropdown",
                         Toast.LENGTH_SHORT
                 ).show();
                 return;
@@ -163,56 +137,24 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             );
         });
 
-        btnAirMouse.setOnClickListener(v -> toggleAirMouse());
+        touchpad.setOnTouchpadListener((dx, dy) -> {
+            connectionManager.sendData(
+                    dx,
+                    dy,
+                    mouseButtons,
+                    0
+            );
+        });
 
-        touchpad.setOnTouchpadListener(
-                new TouchpadView.OnTouchpadListener() {
-                    @Override
-                    public void onMove(int dx, int dy) {
-                        // Pergerakan touchpad selalu dikirim,
-                        // tidak bergantung pada mode Air Mouse.
-                        connectionManager.sendData(
-                                dx,
-                                dy,
-                                mouseButtons,
-                                0
-                        );
-                    }
-
-                    @Override
-                    public void onLeftClick() {
-                        sendClick(BUTTON_LEFT);
-                    }
-
-                    @Override
-                    public void onRightClick() {
-                        sendClick(BUTTON_RIGHT);
-                    }
-
-                    @Override
-                    public void onScroll(int direction) {
-                        connectionManager.sendData(
-                                0,
-                                0,
-                                mouseButtons,
-                                direction
-                        );
-                    }
-
-                    @Override
-                    public void onZoom(int direction) {
-                        connectionManager.sendData(
-                                0,
-                                0,
-                                mouseButtons | BUTTON_ZOOM,
-                                direction
-                        );
-                    }
-                }
+        setMouseButtonListener(
+                btnLeft,
+                LEFT_BUTTON
         );
 
-        setMouseButtonListener(btnLeft, BUTTON_LEFT);
-        setMouseButtonListener(btnRight, BUTTON_RIGHT);
+        setMouseButtonListener(
+                btnRight,
+                RIGHT_BUTTON
+        );
 
         btnScrollUp.setOnClickListener(v ->
                 connectionManager.sendData(
@@ -230,136 +172,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                         mouseButtons,
                         -1
                 )
-        );
-    }
-
-    private void toggleAirMouse() {
-        if (gyroscope == null) {
-            Toast.makeText(
-                    this,
-                    "Giroskop tidak tersedia",
-                    Toast.LENGTH_LONG
-            ).show();
-            return;
-        }
-
-        airMouseEnabled = !airMouseEnabled;
-        lastGyroTimestamp = 0;
-
-        if (airMouseEnabled) {
-            btnAirMouse.setText("Air Mouse: ON");
-            btnAirMouse.setBackgroundTintList(
-                    android.content.res.ColorStateList.valueOf(
-                            0xFF4CAF50
-                    )
-            );
-            startGyroscope();
-        } else {
-            btnAirMouse.setText("Air Mouse: OFF");
-            btnAirMouse.setBackgroundTintList(
-                    android.content.res.ColorStateList.valueOf(
-                            0xFF455A64
-                    )
-            );
-            stopGyroscope();
-        }
-    }
-
-    private void startGyroscope() {
-        if (sensorManager != null && gyroscope != null) {
-            sensorManager.registerListener(
-                    this,
-                    gyroscope,
-                    SensorManager.SENSOR_DELAY_GAME
-            );
-        }
-    }
-
-    private void stopGyroscope() {
-        if (sensorManager != null) {
-            sensorManager.unregisterListener(this);
-        }
-    }
-
-    @Override
-    public void onSensorChanged(SensorEvent event) {
-        if (
-                !airMouseEnabled
-                        || event.sensor.getType()
-                        != Sensor.TYPE_GYROSCOPE
-        ) {
-            return;
-        }
-
-        if (lastGyroTimestamp == 0) {
-            lastGyroTimestamp = event.timestamp;
-            return;
-        }
-
-        float seconds =
-                (event.timestamp - lastGyroTimestamp)
-                        / 1_000_000_000f;
-
-        lastGyroTimestamp = event.timestamp;
-
-        if (seconds <= 0 || seconds > 0.1f) {
-            return;
-        }
-
-        float gyroX =
-                Math.abs(event.values[1]) < GYRO_DEAD_ZONE
-                        ? 0
-                        : event.values[1];
-
-        float gyroY =
-                Math.abs(event.values[0]) < GYRO_DEAD_ZONE
-                        ? 0
-                        : event.values[0];
-
-        int dx = Math.round(
-                gyroX * seconds * AIR_MOUSE_SENSITIVITY
-        );
-
-        int dy = Math.round(
-                -gyroY * seconds * AIR_MOUSE_SENSITIVITY
-        );
-
-        dx = clamp(dx);
-        dy = clamp(dy);
-
-        if (dx != 0 || dy != 0) {
-            connectionManager.sendData(
-                    dx,
-                    dy,
-                    mouseButtons,
-                    0
-            );
-        }
-    }
-
-    @Override
-    public void onAccuracyChanged(Sensor sensor, int accuracy) {
-    }
-
-    private int clamp(int value) {
-        return Math.max(-127, Math.min(127, value));
-    }
-
-    private void sendClick(int buttonMask) {
-        mouseButtons |= buttonMask;
-        connectionManager.sendData(
-                0,
-                0,
-                mouseButtons,
-                0
-        );
-
-        mouseButtons &= ~buttonMask;
-        connectionManager.sendData(
-                0,
-                0,
-                mouseButtons,
-                0
         );
     }
 
@@ -436,9 +248,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                         == PackageManager.PERMISSION_GRANTED
         ) {
             loadPairedDevices();
-        } else if (
-                requestCode == REQUEST_BLUETOOTH_CONNECT
-        ) {
+        } else if (requestCode == REQUEST_BLUETOOTH_CONNECT) {
             Toast.makeText(
                     this,
                     "Izin Bluetooth diperlukan",
@@ -508,24 +318,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-        stopGyroscope();
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-
-        if (airMouseEnabled) {
-            startGyroscope();
-        }
-    }
-
-    @Override
     protected void onDestroy() {
-        stopGyroscope();
-        connectionManager.disconnect();
         super.onDestroy();
+        connectionManager.disconnect();
     }
 }
