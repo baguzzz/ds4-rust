@@ -51,9 +51,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private Button btnConnect;
     private Button btnAirMouse;
 
-    private int mouseButtons;
-    private boolean airMouseEnabled;
-    private long lastGyroTimestamp;
+    private int mouseButtons = 0;
+    private boolean airMouseEnabled = false;
+    private long lastGyroTimestamp = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -100,7 +100,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     }
 
                     @Override
-                    public void onNothingSelected(AdapterView<?> parent) {
+                    public void onNothingSelected(
+                            AdapterView<?> parent
+                    ) {
                         selectedDevice = null;
                     }
                 }
@@ -167,14 +169,14 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 new TouchpadView.OnTouchpadListener() {
                     @Override
                     public void onMove(int dx, int dy) {
-                        if (!airMouseEnabled) {
-                            connectionManager.sendData(
-                                    dx,
-                                    dy,
-                                    mouseButtons,
-                                    0
-                            );
-                        }
+                        // Pergerakan touchpad selalu dikirim,
+                        // tidak bergantung pada mode Air Mouse.
+                        connectionManager.sendData(
+                                dx,
+                                dy,
+                                mouseButtons,
+                                0
+                        );
                     }
 
                     @Override
@@ -281,9 +283,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-        if (!airMouseEnabled
-                || event.sensor.getType()
-                != Sensor.TYPE_GYROSCOPE) {
+        if (
+                !airMouseEnabled
+                        || event.sensor.getType()
+                        != Sensor.TYPE_GYROSCOPE
+        ) {
             return;
         }
 
@@ -302,25 +306,23 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             return;
         }
 
-        float gyroX = Math.abs(event.values[1])
-                < GYRO_DEAD_ZONE
-                ? 0
-                : event.values[1];
+        float gyroX =
+                Math.abs(event.values[1]) < GYRO_DEAD_ZONE
+                        ? 0
+                        : event.values[1];
 
-        float gyroY = Math.abs(event.values[0])
-                < GYRO_DEAD_ZONE
-                ? 0
-                : event.values[0];
+        float gyroY =
+                Math.abs(event.values[0]) < GYRO_DEAD_ZONE
+                        ? 0
+                        : event.values[0];
 
-        int dx =
-                Math.round(
-                        gyroX * seconds * AIR_MOUSE_SENSITIVITY
-                );
+        int dx = Math.round(
+                gyroX * seconds * AIR_MOUSE_SENSITIVITY
+        );
 
-        int dy =
-                Math.round(
-                        -gyroY * seconds * AIR_MOUSE_SENSITIVITY
-                );
+        int dy = Math.round(
+                -gyroY * seconds * AIR_MOUSE_SENSITIVITY
+        );
 
         dx = clamp(dx);
         dy = clamp(dy);
@@ -395,10 +397,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     private void checkBluetoothPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ActivityCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED) {
+            if (
+                    ActivityCompat.checkSelfPermission(
+                            this,
+                            Manifest.permission.BLUETOOTH_CONNECT
+                    ) != PackageManager.PERMISSION_GRANTED
+            ) {
                 ActivityCompat.requestPermissions(
                         this,
                         new String[]{
@@ -512,6 +516,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @Override
     protected void onResume() {
         super.onResume();
+
         if (airMouseEnabled) {
             startGyroscope();
         }
