@@ -31,6 +31,7 @@ public class MainActivity extends AppCompatActivity
         implements SensorEventListener {
 
     private static final int REQUEST_BLUETOOTH_CONNECT = 1001;
+
     private static final int LEFT_BUTTON = 1;
     private static final int RIGHT_BUTTON = 2;
 
@@ -177,14 +178,14 @@ public class MainActivity extends AppCompatActivity
         btnAirMouse.setOnClickListener(v -> toggleAirMouse());
 
         touchpad.setOnTouchpadListener((dx, dy) -> {
-            if (!airMouseEnabled) {
-                connectionManager.sendData(
-                        dx,
-                        dy,
-                        mouseButtons,
-                        0
-                );
-            }
+            // Touchpad selalu mengirim gerakan,
+            // baik Air Mouse ON maupun OFF.
+            connectionManager.sendData(
+                    dx,
+                    dy,
+                    mouseButtons,
+                    0
+            );
         });
 
         setMouseButtonListener(btnLeft, LEFT_BUTTON);
@@ -318,7 +319,10 @@ public class MainActivity extends AppCompatActivity
     }
 
     @Override
-    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+    public void onAccuracyChanged(
+            Sensor sensor,
+            int accuracy
+    ) {
     }
 
     private int clamp(int value) {
