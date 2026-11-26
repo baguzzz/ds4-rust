@@ -5,6 +5,10 @@ import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.pm.PackageManager;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.MotionEvent;
@@ -23,19 +27,34 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
     private static final int REQUEST_BLUETOOTH_CONNECT = 1001;
 
+    // Bit 0 = klik kiri, bit 1 = klik kanan, bit 2 = Ctrl+scroll untuk zoom.
+    private static final int BUTTON_LEFT = 1;
+    private static final int BUTTON_RIGHT = 2;
+    private static final int BUTTON_ZOOM = 4;
+
+    private static final float AIR_MOUSE_SENSITIVITY = 180f;
+    private static final float GYRO_DEAD_ZONE = 0.035f;
+
     private ConnectionManager connectionManager;
     private BluetoothAdapter bluetoothAdapter;
+    private SensorManager sensorManager;
+    private Sensor gyroscope;
+
     private final List<BluetoothDevice> deviceList = new ArrayList<>();
-    private BluetoothDevice selectedDevice = null;
+    private BluetoothDevice selectedDevice;
 
     private TextView statusText;
     private Spinner deviceSpinner;
     private Button btnConnect;
+    private Button btnAirMouse;
+
     private int mouseButtons = 0;
+    private boolean airMouseEnabled = false;
+    private long lastGyroTimestamp = 0L;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,9 +64,16 @@ public class MainActivity extends AppCompatActivity {
         connectionManager = ConnectionManager.getInstance();
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
 
+        sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+        if (sensorManager != null) {
+            gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+        }
+
         statusText = findViewById(R.id.statusText);
         deviceSpinner = findViewById(R.id.deviceSpinner);
         btnConnect = findViewById(R.id.btnConnect);
+        btnAirMouse = findViewById(R.id.btnAirMouse);
+
         TouchpadView touchpad = findViewById(R.id.touchpad);
 
         Button btnLeft = findViewById(R.id.btnLeftClick);
@@ -106,9 +132,7 @@ public class MainActivity extends AppCompatActivity {
                         @Override
                         public void onSuccess(String deviceName) {
                             runOnUiThread(() -> {
-                                statusText.setText(
-                                        "✅ Terhubung ke " + deviceName
-                                );
+                                statusText.setText("Terhubung ke " + deviceName);
                                 statusText.setTextColor(0xFF4CAF50);
                                 btnConnect.setText("Disconnect");
                                 btnConnect.setEnabled(true);
@@ -119,10 +143,9 @@ public class MainActivity extends AppCompatActivity {
                         public void onFailure(String errorMessage) {
                             runOnUiThread(() -> {
                                 statusText.setText(
-                                        "❌ Gagal: " +
-                                                (errorMessage != null
-                                                        ? errorMessage
-                                                        : "Koneksi gagal")
+                                        "Gagal: " + (errorMessage != null
+                                                ? errorMessage
+                                                : "Koneksi gagal")
                                 );
                                 statusText.setTextColor(0xFFF44336);
                                 btnConnect.setText("Connect");
@@ -133,48 +156,45 @@ public class MainActivity extends AppCompatActivity {
             );
         });
 
-        touchpad.setOnTouchpadListener((dx, dy) -> {
-            connectionManager.sendData(
-                    dx,
-                    dy,
-                    mouseButtons,
-                    0
-            );
-        });
+        btnAirMouse.setOnClickListener(v -> toggleAirMouse());
 
-        btnLeft.setOnTouchListener((v, event) -> {
-            int action = event.getActionMasked();
-
-            if (action == MotionEvent.ACTION_DOWN) {
-                mouseButtons |= 1;
-                connectionManager.sendData(0, 0, mouseButtons, 0);
-            } else if (
-                    action == MotionEvent.ACTION_UP
-                            || action == MotionEvent.ACTION_CANCEL
-            ) {
-                mouseButtons &= ~1;
-                connectionManager.sendData(0, 0, mouseButtons, 0);
+        touchpad.setOnTouchpadListener(new TouchpadView.OnTouchpadListener() {
+            @Override
+            public void onMove(int dx, int dy) {
+                if (!airMouseEnabled) {
+                    connectionManager.sendData(dx, dy, mouseButtons, 0);
+                }
             }
 
-            return true;
-        });
-
-        btnRight.setOnTouchListener((v, event) -> {
-            int action = event.getActionMasked();
-
-            if (action == MotionEvent.ACTION_DOWN) {
-                mouseButtons |= 2;
-                connectionManager.sendData(0, 0, mouseButtons, 0);
-            } else if (
-                    action == MotionEvent.ACTION_UP
-                            || action == MotionEvent.ACTION_CANCEL
-            ) {
-                mouseButtons &= ~2;
-                connectionManager.sendData(0, 0, mouseButtons, 0);
+            @Override
+            public void onLeftClick() {
+                sendClick(BUTTON_LEFT);
             }
 
-            return true;
+            @Override
+            public void onRightClick() {
+                sendClick(BUTTON_RIGHT);
+            }
+
+            @Override
+            public void onScroll(int direction) {
+                connectionManager.sendData(0, 0, mouseButtons, direction);
+            }
+
+            @Override
+            public void onZoom(int direction) {
+                // Flag BUTTON_ZOOM akan diterjemahkan pc-rust sebagai Ctrl+wheel.
+                connectionManager.sendData(
+                        0,
+                        0,
+                        mouseButtons | BUTTON_ZOOM,
+                        direction
+                );
+            }
         });
+
+        setMouseButtonListener(btnLeft, BUTTON_LEFT);
+        setMouseButtonListener(btnRight, BUTTON_RIGHT);
 
         btnScrollUp.setOnClickListener(v ->
                 connectionManager.sendData(0, 0, mouseButtons, 1)
@@ -183,6 +203,121 @@ public class MainActivity extends AppCompatActivity {
         btnScrollDown.setOnClickListener(v ->
                 connectionManager.sendData(0, 0, mouseButtons, -1)
         );
+    }
+
+    private void toggleAirMouse() {
+        if (gyroscope == null) {
+            Toast.makeText(
+                    this,
+                    "Giroskop tidak tersedia di perangkat ini",
+                    Toast.LENGTH_LONG
+            ).show();
+            return;
+        }
+
+        airMouseEnabled = !airMouseEnabled;
+        lastGyroTimestamp = 0L;
+
+        if (airMouseEnabled) {
+            btnAirMouse.setText("Air Mouse: ON");
+            btnAirMouse.setBackgroundTintList(
+                    android.content.res.ColorStateList.valueOf(0xFF4CAF50)
+            );
+            startGyroscope();
+        } else {
+            btnAirMouse.setText("Air Mouse: OFF");
+            btnAirMouse.setBackgroundTintList(
+                    android.content.res.ColorStateList.valueOf(0xFF455A64)
+            );
+            stopGyroscope();
+        }
+    }
+
+    private void startGyroscope() {
+        if (sensorManager != null && gyroscope != null) {
+            sensorManager.registerListener(
+                    this,
+                    gyroscope,
+                    SensorManager.SENSOR_DELAY_GAME
+            );
+        }
+    }
+
+    private void stopGyroscope() {
+        if (sensorManager != null) {
+            sensorManager.unregisterListener(this);
+        }
+        lastGyroTimestamp = 0L;
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        if (!airMouseEnabled || event.sensor.getType() != Sensor.TYPE_GYROSCOPE) {
+            return;
+        }
+
+        if (lastGyroTimestamp == 0L) {
+            lastGyroTimestamp = event.timestamp;
+            return;
+        }
+
+        float dt = (event.timestamp - lastGyroTimestamp) / 1_000_000_000f;
+        lastGyroTimestamp = event.timestamp;
+
+        if (dt <= 0f || dt > 0.1f) {
+            return;
+        }
+
+        // Sensor values giroskop dalam radian/detik.
+        // Pemetaan ini sesuai untuk ponsel yang digunakan dalam orientasi landscape.
+        float gyroX = Math.abs(event.values[1]) < GYRO_DEAD_ZONE
+                ? 0f : event.values[1];
+        float gyroY = Math.abs(event.values[0]) < GYRO_DEAD_ZONE
+                ? 0f : event.values[0];
+
+        int dx = Math.round(gyroX * dt * AIR_MOUSE_SENSITIVITY);
+        int dy = Math.round(-gyroY * dt * AIR_MOUSE_SENSITIVITY);
+
+        dx = clampMouseDelta(dx);
+        dy = clampMouseDelta(dy);
+
+        if (dx != 0 || dy != 0) {
+            connectionManager.sendData(dx, dy, mouseButtons, 0);
+        }
+    }
+
+    private int clampMouseDelta(int value) {
+        return Math.max(-127, Math.min(127, value));
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        // Tidak diperlukan.
+    }
+
+    private void sendClick(int buttonMask) {
+        mouseButtons |= buttonMask;
+        connectionManager.sendData(0, 0, mouseButtons, 0);
+
+        mouseButtons &= ~buttonMask;
+        connectionManager.sendData(0, 0, mouseButtons, 0);
+    }
+
+    private void setMouseButtonListener(Button button, int buttonMask) {
+        button.setOnTouchListener((v, event) -> {
+            int action = event.getActionMasked();
+
+            if (action == MotionEvent.ACTION_DOWN) {
+                mouseButtons |= buttonMask;
+                connectionManager.sendData(0, 0, mouseButtons, 0);
+            } else if (action == MotionEvent.ACTION_UP
+                    || action == MotionEvent.ACTION_CANCEL) {
+                mouseButtons &= ~buttonMask;
+                connectionManager.sendData(0, 0, mouseButtons, 0);
+            }
+
+            return true;
+        });
     }
 
     private void checkBluetoothPermission() {
@@ -209,18 +344,11 @@ public class MainActivity extends AppCompatActivity {
             String[] permissions,
             int[] grantResults
     ) {
-        super.onRequestPermissionsResult(
-                requestCode,
-                permissions,
-                grantResults
-        );
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
-        if (
-                requestCode == REQUEST_BLUETOOTH_CONNECT
-                        && grantResults.length > 0
-                        && grantResults[0]
-                        == PackageManager.PERMISSION_GRANTED
-        ) {
+        if (requestCode == REQUEST_BLUETOOTH_CONNECT
+                && grantResults.length > 0
+                && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             loadPairedDevices();
         } else if (requestCode == REQUEST_BLUETOOTH_CONNECT) {
             Toast.makeText(
@@ -253,9 +381,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        Set<BluetoothDevice> paired =
-                bluetoothAdapter.getBondedDevices();
-
+        Set<BluetoothDevice> paired = bluetoothAdapter.getBondedDevices();
         List<String> names = new ArrayList<>();
 
         if (paired != null && !paired.isEmpty()) {
@@ -266,7 +392,6 @@ public class MainActivity extends AppCompatActivity {
                 if (name == null || name.isEmpty()) {
                     name = device.getAddress();
                 }
-
                 names.add(name);
             }
 
@@ -276,23 +401,38 @@ public class MainActivity extends AppCompatActivity {
             selectedDevice = null;
         }
 
-        ArrayAdapter<String> adapter =
-                new ArrayAdapter<>(
-                        this,
-                        android.R.layout.simple_spinner_item,
-                        names
-                );
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_spinner_item,
+                names
+        );
 
         adapter.setDropDownViewResource(
                 android.R.layout.simple_spinner_dropdown_item
         );
-
         deviceSpinner.setAdapter(adapter);
     }
 
     @Override
+    protected void onPause() {
+        super.onPause();
+        if (airMouseEnabled) {
+            stopGyroscope();
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (airMouseEnabled) {
+            startGyroscope();
+        }
+    }
+
+    @Override
     protected void onDestroy() {
-        super.onDestroy();
+        stopGyroscope();
         connectionManager.disconnect();
+        super.onDestroy();
     }
 }
